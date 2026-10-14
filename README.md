@@ -1,4 +1,4 @@
-# Agentic Core
+# Lead-Gen
 
 AI-powered Learning Tutor backend with image generation and Qdrant vector search.
 
