@@ -1,0 +1,35 @@
+agent_id: lead_company_discovery_agent
+version: "1.0"
+description: "Phase 1 lead-gen agent focused on broad, high-confidence company discovery before person/contact enrichment."
+model_profile: small
+system_prompt_path: config/prompts/agents/lead_company_discovery_agent.txt
+response_mode: json
+allowed_tools:
+  - web_search
+  - http_request
+  - json_extract
+memory_window: 6
+max_steps: 16
+max_tool_calls: 30
+max_runtime_seconds: 300
+default_context:
+  output_format: json
+  target_company_pool: 100
+  search_expansion_enabled: true
+output_schema:
+  type: object
+  properties:
+    companies:
+      type: array
+      items:
+        type: object
+        properties:
+          company_name: { type: string }
+          company_website: { type: string }
+          industry: { type: string }
+          location: { type: string }
+          value_proposition: { type: string }
+          company_size: { type: string }
+          source: { type: string }
+        required: [company_name, company_website]
+  required: [companies]

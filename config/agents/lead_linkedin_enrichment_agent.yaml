@@ -1,0 +1,46 @@
+agent_id: lead_linkedin_enrichment_agent
+version: "1.0"
+description: "Stage 5 lead-gen agent that finds LinkedIn profiles and enriches people-level details."
+model_profile: large
+system_prompt_path: config/prompts/agents/lead_linkedin_enrichment_agent.txt
+response_mode: json
+allowed_tools:
+  - web_search
+  - linkedin_research
+memory_window: 6
+max_steps: 20
+max_tool_calls: 40
+max_runtime_seconds: 300
+default_context:
+  output_format: json
+  target_lead_count: 40
+output_schema:
+  type: object
+  properties:
+    leads:
+      type: array
+      items:
+        type: object
+        properties:
+          company_name: { type: string }
+          company_website: { type: string }
+          industry: { type: string }
+          location: { type: string }
+          value_proposition: { type: string }
+          company_size: { type: string }
+          contact_person_name: { type: string }
+          founder_name: { type: string }
+          contact_person_title: { type: string }
+          contact_email: { type: string }
+          contact_phone: { type: string }
+          linkedin_url: { type: string }
+          contact_page: { type: string }
+          source: { type: string }
+          source_details:
+            type: array
+            items: { type: object }
+          confidence:
+            type: string
+            enum: [high, medium, low]
+        required: [company_name, company_website]
+  required: [leads]
