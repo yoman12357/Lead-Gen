@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Company Chat</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .field {
+      width: 100%;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 14px;
+      color: #0f172a;
+      background: #ffffff;
+      outline: none;
+    }
+    .field:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
+    .btn {
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #0f172a;
+    }
+    .btn:hover { background: #f8fafc; }
+    .btn:disabled { cursor: not-allowed; opacity: .45; }
+    .btn-primary { background: #2563eb; border-color: #2563eb; color: #ffffff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .panel { border: 1px solid #e2e8f0; background: #ffffff; border-radius: 8px; }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-100 text-slate-900">
+  <nav class="border-b border-slate-200 bg-white">
+    <div class="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
+      <div>
+        <h1 class="text-lg font-bold">Company Chat</h1>
+        <p class="text-xs text-slate-500">Company intelligence and Hunter lead report</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <a class="btn" href="/hunter-search">Hunter Search</a>
+        <a class="btn" href="/">Dashboard</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="mx-auto grid max-w-7xl grid-cols-1 gap-5 px-5 py-6 lg:grid-cols-[280px_1fr]">
+    <aside class="panel p-4">
+      <div class="mb-3 flex items-center justify-between">
+        <h2 class="text-sm font-bold">Runs</h2>
+        <button id="new-run-btn" class="btn" type="button">New</button>
+      </div>
+      <div id="run-list" class="space-y-2 text-sm text-slate-600"></div>
+    </aside>
+
+    <section class="panel flex min-h-[720px] flex-col">
+      <header class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+        <div>
+          <div id="run-title" class="text-sm font-bold">New company run</div>
+          <div id="run-status" class="mt-1 text-xs text-slate-500">Idle</div>
+        </div>
+        <button id="download-pdf-btn" class="btn btn-primary" type="button" disabled>Download PDF</button>
+      </header>
+
+      <div id="chat-thread" class="flex-1 space-y-4 overflow-y-auto p-4"></div>
+
+      <form id="chat-form" class="border-t border-slate-200 p-4">
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-[1fr_120px_auto]">
+          <input id="prompt-input" class="field" type="text" placeholder="Show details and leads for HubSpot" required />
+          <input id="lead-count-input" class="field" type="number" min="1" max="15" value="8" />
+          <button id="send-btn" class="btn btn-primary" type="submit">Send</button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <script>
+    const state = {
+      currentRun: null,
+      runs: [],
+      sessionId: localStorage.getItem('companyChatSessionId') || crypto.randomUUID(),
+    };
+    localStorage.setItem('companyChatSessionId', state.sessionId);
+
+    const els = {
+      runList: document.getElementById('run-list'),
+      runTitle: document.getElementById('run-title'),
+      runStatus: document.getElementById('run-status'),
+      chatThread: document.getElementById('chat-thread'),
+      chatForm: document.getElementById('chat-form'),
+      promptInput: document.getElementById('prompt-input'),
+      leadCountInput: document.getElementById('lead-count-input'),
+      sendBtn: document.getElementById('send-btn'),
+      downloadPdfBtn: document.getElementById('download-pdf-btn'),
+      newRunBtn: document.getElementById('new-run-btn'),
+    };
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function renderRunList() {
+      els.runList.innerHTML = state.runs.map(run => `
+        <button class="w-full rounded-md border border-slate-200 px-3 py-2 text-left hover:bg-slate-50" data-run-id="${escapeHtml(run.run_id)}" type="button">
+          <div class="truncate font-semibold text-slate-900">${escapeHtml(run.company_profile?.company_name || 'Company run')}</div>
+          <div class="truncate text-xs text-slate-500">${escapeHtml(new Date(run.timestamp || Date.now()).toLocaleString())}</div>
+        </button>
+      `).join('') || '<div class="rounded-md border border-dashed border-slate-200 px-3 py-6 text-center text-xs text-slate-400">No runs yet</div>';
+    }
+
+    function messageBlock(role, html) {
+      const align = role === 'user' ? 'justify-end' : 'justify-start';
+      const tone = role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-900 border border-slate-200';
+      return `<div class="flex ${align}"><div class="max-w-3xl rounded-lg px-4 py-3 text-sm ${tone}">${html}</div></div>`;
+    }
+
+    function listItems(values) {
+      const items = (values || []).filter(Boolean);
+      if (!items.length) return '<div class="text-slate-500">-</div>';
+      return `<ul class="list-disc space-y-1 pl-5">${items.map(item => `<li>${escapeHtml(typeof item === 'string' ? item : item.url || item.label || JSON.stringify(item))}</li>`).join('')}</ul>`;
+    }
+
+    function renderStructuredRun(run) {
+      const profile = run.company_profile || {};
+      const contacts = profile.contacts || {};
+      const leads = run.leads || [];
+      const socialLinks = (profile.social_links || []).map(link => `${link.label || 'social'}: ${link.url || link}`);
+      const sourceUrls = profile.source_urls || [];
+      return `
+        <div class="space-y-4">
+          <section>
+            <h3 class="mb-1 text-sm font-bold">About Company</h3>
+            <p class="text-slate-700">${escapeHtml(profile.summary || '-')}</p>
+          </section>
+          <section class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <h3 class="mb-1 text-sm font-bold">Services</h3>
+              ${listItems(profile.services)}
+            </div>
+            <div>
+              <h3 class="mb-1 text-sm font-bold">Contact Details</h3>
+              ${listItems([...(contacts.emails || []), ...(contacts.phones || [])])}
+            </div>
+          </section>
+          <section>
+            <h3 class="mb-2 text-sm font-bold">Social Profiles</h3>
+            ${listItems(socialLinks)}
+          </section>
+          <section>
+            <h3 class="mb-2 text-sm font-bold">Lead Contacts</h3>
+            <div class="overflow-x-auto rounded-lg border border-slate-200">
+              <table class="min-w-full divide-y divide-slate-200 text-xs">
+                <thead class="bg-slate-50 text-left uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th class="px-3 py-2">Name</th>
+                    <th class="px-3 py-2">Title</th>
+                    <th class="px-3 py-2">Email</th>
+                    <th class="px-3 py-2">Phone</th>
+                    <th class="px-3 py-2">Status</th>
+                    <th class="px-3 py-2">Score</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  ${leads.map(lead => `
+                    <tr>
+                      <td class="px-3 py-2">${escapeHtml(lead.contact_person_name || lead.person_name || '-')}</td>
+                      <td class="px-3 py-2">${escapeHtml(lead.contact_person_title || lead.title || '-')}</td>
+                      <td class="px-3 py-2">${escapeHtml(lead.contact_email || lead.email || '-')}</td>
+                      <td class="px-3 py-2">${escapeHtml(lead.contact_phone || lead.phone || '-')}</td>
+                      <td class="px-3 py-2">${escapeHtml(lead.verification_status || '-')}</td>
+                      <td class="px-3 py-2">${escapeHtml(lead.quality_score || '-')}</td>
+                    </tr>
+                  `).join('') || '<tr><td class="px-3 py-4 text-slate-500" colspan="6">No leads returned.</td></tr>'}
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <h3 class="mb-1 text-sm font-bold">Warnings</h3>
+              ${listItems(run.warnings)}
+            </div>
+            <div>
+              <h3 class="mb-1 text-sm font-bold">Source Links</h3>
+              ${listItems(sourceUrls)}
+            </div>
+          </section>
+        </div>
+      `;
+    }
+
+    function renderCurrentRun() {
+      const run = state.currentRun;
+      els.downloadPdfBtn.disabled = !(run && run.success && run.run_id);
+      if (!run) {
+        els.runTitle.textContent = 'New company run';
+        els.runStatus.textContent = 'Idle';
+        els.chatThread.innerHTML = '';
+        return;
+      }
+      els.runTitle.textContent = run.company_profile?.company_name || 'Company run';
+      els.runStatus.textContent = run.run_id ? `Run ${run.run_id}` : 'Needs clarification';
+      els.chatThread.innerHTML = [
+        messageBlock('user', escapeHtml(run.prompt || els.promptInput.value || '')),
+        messageBlock('assistant', `<p class="mb-3">${escapeHtml(run.assistant_message || '')}</p>${run.success ? renderStructuredRun(run) : ''}`),
+      ].join('');
+      els.chatThread.scrollTop = els.chatThread.scrollHeight;
+    }
+
+    async function submitRun(event) {
+      event.preventDefault();
+      const prompt = els.promptInput.value.trim();
+      if (!prompt) return;
+      els.sendBtn.disabled = true;
+      els.runStatus.textContent = 'Running...';
+      els.chatThread.innerHTML = messageBlock('user', escapeHtml(prompt)) + messageBlock('assistant', 'Working...');
+      try {
+        const response = await fetch('/api/company-intel/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt,
+            lead_count: Number(els.leadCountInput.value) || 8,
+            session_id: state.sessionId,
+          }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || `Request failed: ${response.status}`);
+        data.prompt = prompt;
+        state.currentRun = data;
+        if (data.run_id) {
+          state.runs = [data, ...state.runs.filter(run => run.run_id !== data.run_id)].slice(0, 25);
+          renderRunList();
+        }
+        renderCurrentRun();
+      } catch (error) {
+        state.currentRun = {
+          success: false,
+          prompt,
+          assistant_message: error.message,
+          warnings: [],
+          errors: [error.message],
+        };
+        renderCurrentRun();
+      } finally {
+        els.sendBtn.disabled = false;
+      }
+    }
+
+    els.chatForm.addEventListener('submit', submitRun);
+    els.downloadPdfBtn.addEventListener('click', () => {
+      if (!state.currentRun?.run_id) return;
+      window.location.href = `/api/company-intel/run/${encodeURIComponent(state.currentRun.run_id)}/pdf`;
+    });
+    els.newRunBtn.addEventListener('click', () => {
+      state.currentRun = null;
+      els.promptInput.value = '';
+      renderCurrentRun();
+    });
+    els.runList.addEventListener('click', event => {
+      const button = event.target.closest('button[data-run-id]');
+      if (!button) return;
+      const run = state.runs.find(item => item.run_id === button.dataset.runId);
+      if (!run) return;
+      state.currentRun = run;
+      renderCurrentRun();
+    });
+
+    renderRunList();
+    renderCurrentRun();
+  </script>
+</body>
+</html>
+

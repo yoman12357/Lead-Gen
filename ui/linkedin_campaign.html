@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agentic Core - LinkedIn Campaign</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            lv: {
+              50: '#f5f5ff', 100: '#ececff', 200: '#d9d9ff', 300: '#c1c1ff',
+              400: '#a3a3ff', 500: '#8181ff', 600: '#6363ff', 700: '#5252e6',
+              800: '#4545c0', 900: '#3a3a9b', 950: '#1a1a3a',
+            }
+          },
+          fontFamily: { outfit: ['Outfit', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    :root {
+      --bg-main: #090b14;
+      --bg-grad-a: rgba(20,184,166,.13);
+      --bg-grad-b: rgba(99,102,241,.12);
+      --text-main: #eef2ff;
+      --glass-bg: rgba(12,17,34,.84);
+      --glass-border: rgba(129,129,255,.16);
+      --field-bg: rgba(7,12,24,.9);
+      --field-border: rgba(129,129,255,.24);
+      --field-text: #eef2ff;
+      --muted: rgba(193,193,255,.68);
+      --row-hover: rgba(20,184,166,.08);
+    }
+    body.light-theme {
+      --bg-main: #eef3ff;
+      --bg-grad-a: rgba(20,184,166,.16);
+      --bg-grad-b: rgba(79,70,229,.18);
+      --text-main: #111827;
+      --glass-bg: rgba(255,255,255,.98);
+      --glass-border: rgba(71,85,105,.22);
+      --field-bg: #f8fafc;
+      --field-border: rgba(100,116,139,.42);
+      --field-text: #0f172a;
+      --muted: rgba(51,65,85,.82);
+      --row-hover: rgba(204,251,241,.65);
+    }
+    body {
+      min-height: 100vh;
+      background-color: var(--bg-main);
+      background-image:
+        radial-gradient(ellipse at 5% 8%, var(--bg-grad-a) 0%, transparent 48%),
+        radial-gradient(ellipse at 95% 92%, var(--bg-grad-b) 0%, transparent 50%);
+      color: var(--text-main);
+      font-family: 'Outfit', sans-serif;
+    }
+    .glass {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(14px);
+    }
+    .field {
+      width: 100%;
+      background: var(--field-bg);
+      border: 1px solid var(--field-border);
+      border-radius: 14px;
+      color: var(--field-text);
+      outline: none;
+      padding: 11px 14px;
+      font-size: 14px;
+    }
+    .field:focus { border-color: rgba(20,184,166,.75); box-shadow: 0 0 0 3px rgba(20,184,166,.12); }
+    textarea.field { min-height: 120px; resize: vertical; }
+    .btn-main {
+      background: linear-gradient(135deg, #5eead4 0%, #38bdf8 52%, #818cf8 100%);
+      color: #07111f;
+      font-weight: 800;
+      box-shadow: 0 12px 30px rgba(20,184,166,.22);
+    }
+    .btn-main:disabled, .btn-soft:disabled { opacity: .52; cursor: not-allowed; }
+    .btn-soft {
+      border: 1px solid rgba(129,129,255,.2);
+      background: rgba(129,129,255,.1);
+      color: inherit;
+    }
+    .btn-danger {
+      background: linear-gradient(135deg, #fb7185, #f97316);
+      color: #fff;
+      font-weight: 800;
+    }
+    .chip {
+      border: 1px solid rgba(20,184,166,.28);
+      background: rgba(20,184,166,.1);
+      color: #99f6e4;
+      border-radius: 999px;
+      padding: 5px 9px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    body.light-theme .chip { color: #0f766e; }
+    .status-pill { border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 800; }
+    .status-pending { background: rgba(148,163,184,.14); color: #94a3b8; }
+    .status-preview { background: rgba(14,165,233,.14); color: #38bdf8; }
+    .status-scheduled { background: rgba(168,85,247,.14); color: #c084fc; }
+    .status-sent { background: rgba(34,197,94,.14); color: #4ade80; }
+    .status-failed { background: rgba(239,68,68,.14); color: #f87171; }
+    .status-skipped { background: rgba(245,158,11,.14); color: #fbbf24; }
+    .lead-row:hover { background: var(--row-hover); }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-thumb { background: #32405f; border-radius: 10px; }
+    body.light-theme .text-white { color: #111827 !important; }
+    body.light-theme .text-lv-300, body.light-theme .text-lv-300\/70, body.light-theme .text-lv-400 { color: #334155 !important; }
+    body.light-theme .bg-lv-950\/40, body.light-theme .bg-lv-950\/50 { background: #f1f5f9 !important; }
+    body.light-theme .border-lv-500\/10, body.light-theme .border-lv-500\/20 { border-color: rgba(100,116,139,.34) !important; }
+  </style>
+</head>
+<body>
+  <nav class="glass sticky top-0 z-50 px-6 lg:px-8 py-4 flex items-center justify-between border-b border-lv-900/50">
+    <div class="flex items-center gap-3 min-w-0">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-300 via-sky-400 to-lv-600 flex items-center justify-center shadow-lg shadow-teal-500/20">
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8M8 14h5M6 20l-2 2v-5a8 8 0 118 3H6z"/>
+        </svg>
+      </div>
+      <div class="min-w-0">
+        <h1 class="text-lg font-bold text-white truncate">LinkedIn Campaign</h1>
+        <p class="text-[10px] text-lv-400 uppercase tracking-[.18em] font-semibold">Experimental Outreach Workflow</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <button id="theme-toggle-btn" class="btn-soft px-4 py-2 rounded-xl text-[11px] font-bold">Light Mode</button>
+      <a href="/leads" class="text-xs text-lv-300/70 hover:text-white transition-colors">Lead Generator</a>
+      <a href="/" class="text-xs text-lv-300/70 hover:text-white transition-colors">Dashboard</a>
+    </div>
+  </nav>
+
+  <main class="max-w-[1680px] mx-auto px-5 lg:px-8 py-6 grid grid-cols-12 gap-6">
+    <section class="col-span-12 rounded-3xl border border-amber-400/25 bg-amber-500/10 px-5 py-4">
+      <div class="flex flex-col lg:flex-row lg:items-center gap-3">
+        <div class="flex-1">
+          <div class="text-sm font-bold text-amber-200">Experimental LinkedIn automation</div>
+          <p class="text-xs text-amber-100/80 mt-1">Dry run is the default. Live sending can violate LinkedIn rules and may restrict the account. Use small batches and review every preview.</p>
+        </div>
+        <label class="flex items-center gap-2 text-xs font-bold text-amber-100">
+          <input id="risk-ack" type="checkbox" class="w-4 h-4 accent-teal-400">
+          I understand the live-send risk
+        </label>
+      </div>
+    </section>
+
+    <aside class="col-span-12 xl:col-span-4 space-y-5">
+      <section class="glass rounded-3xl p-5 shadow-2xl">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-bold text-white">Create Contact</h2>
+          <span id="session-status" class="status-pill status-pending">Checking</span>
+        </div>
+        <div class="space-y-3">
+          <input id="quick-name" class="field" placeholder="Person name, e.g. Jane Doe" />
+          <input id="quick-company" class="field" placeholder="Company name" />
+          <input id="quick-title" class="field" placeholder="Role or title" />
+          <input id="quick-linkedin" class="field" placeholder="LinkedIn profile URL or company URL" />
+          <button id="add-contact-btn" class="btn-main w-full rounded-2xl py-3 text-sm">Add Contact</button>
+        </div>
+      </section>
+
+      <section class="glass rounded-3xl p-5 shadow-2xl">
+        <h2 class="text-sm font-bold text-white mb-4">Import Leads</h2>
+        <div class="space-y-3">
+          <textarea id="json-input" class="field font-mono text-xs" placeholder='Paste a JSON array from lead generation'></textarea>
+          <div class="grid grid-cols-2 gap-3">
+            <button id="import-json-btn" class="btn-soft rounded-2xl py-3 text-sm font-bold">Import JSON</button>
+            <label class="btn-soft rounded-2xl py-3 text-sm font-bold text-center cursor-pointer">
+              Upload XLSX
+              <input id="xlsx-input" type="file" accept=".xlsx,.xls,.csv" class="hidden">
+            </label>
+          </div>
+          <button id="fetch-last-btn" class="btn-soft w-full rounded-2xl py-3 text-sm font-bold">Fetch Last Run</button>
+        </div>
+      </section>
+
+      <section class="glass rounded-3xl p-5 shadow-2xl">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-bold text-white">LinkedIn Session</h2>
+          <button id="refresh-session-btn" class="btn-soft px-3 py-1.5 rounded-xl text-xs font-bold">Refresh</button>
+        </div>
+        <div class="flex gap-2">
+          <input id="cookie-input" class="field" placeholder="Paste li_at cookie" />
+          <button id="save-cookie-btn" class="btn-main px-4 rounded-2xl text-sm">Save</button>
+        </div>
+        <p class="text-xs mt-3" style="color:var(--muted)">This reuses the same session file as the lead generator.</p>
+      </section>
+
+      <section class="glass rounded-3xl p-5 shadow-2xl">
+        <div class="grid grid-cols-2 gap-3">
+          <div class="rounded-2xl bg-lv-950/40 border border-lv-500/10 p-3">
+            <div class="text-[10px] uppercase tracking-wider text-lv-400 font-bold">Leads</div>
+            <div id="stat-total" class="text-2xl font-bold text-white">0</div>
+          </div>
+          <div class="rounded-2xl bg-lv-950/40 border border-lv-500/10 p-3">
+            <div class="text-[10px] uppercase tracking-wider text-lv-400 font-bold">Selected</div>
+            <div id="stat-selected" class="text-2xl font-bold text-white">0</div>
+          </div>
+          <div class="rounded-2xl bg-lv-950/40 border border-lv-500/10 p-3">
+            <div class="text-[10px] uppercase tracking-wider text-lv-400 font-bold">Profiles</div>
+            <div id="stat-person" class="text-2xl font-bold text-white">0</div>
+          </div>
+          <div class="rounded-2xl bg-lv-950/40 border border-lv-500/10 p-3">
+            <div class="text-[10px] uppercase tracking-wider text-lv-400 font-bold">Sent Today</div>
+            <div id="stat-daily" class="text-2xl font-bold text-white">0</div>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <section class="col-span-12 xl:col-span-8 space-y-5">
+      <section class="glass rounded-3xl p-5 shadow-2xl">
+        <div class="flex flex-col lg:flex-row lg:items-center gap-4 mb-5">
+          <div class="flex-1">
+            <h2 class="text-sm font-bold text-white">Campaign Composer</h2>
+            <p class="text-xs mt-1" style="color:var(--muted)">Choose schedule, template, and send mode for selected contacts.</p>
+          </div>
+          <button id="enrich-btn" class="btn-soft rounded-2xl px-4 py-3 text-sm font-bold">Enrich LinkedIn</button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+          <div>
+            <label class="text-[11px] text-lv-300/70 mb-2 block font-bold uppercase tracking-wider">Purpose</label>
+            <select id="purpose-input" class="field">
+              <option value="partnership outreach">Partnership</option>
+              <option value="sales outreach">Sales</option>
+              <option value="hiring outreach">Hiring</option>
+              <option value="networking">Networking</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-[11px] text-lv-300/70 mb-2 block font-bold uppercase tracking-wider">Your Company</label>
+            <input id="sender-company" class="field" placeholder="Aurika AI" />
+          </div>
+          <div>
+            <label class="text-[11px] text-lv-300/70 mb-2 block font-bold uppercase tracking-wider">Your Role</label>
+            <input id="sender-role" class="field" value="Founder" />
+          </div>
+          <div>
+            <label class="text-[11px] text-lv-300/70 mb-2 block font-bold uppercase tracking-wider">Send Date/Time</label>
+            <input id="scheduled-at" type="datetime-local" class="field" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4 mt-4">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-[11px] text-lv-300/70 font-bold uppercase tracking-wider">Message Template</label>
+              <span id="char-count" class="text-xs text-lv-400">0 / 300</span>
+            </div>
+            <textarea id="template-input" class="field" maxlength="1200">Hi {{first_name}}, I noticed {{company_name}} and thought there may be a useful way for us to connect. Open to a quick chat?</textarea>
+            <div id="chips" class="flex flex-wrap gap-2 mt-3">
+              <button class="chip" data-chip="{{first_name}}">{{first_name}}</button>
+              <button class="chip" data-chip="{{company_name}}">{{company_name}}</button>
+              <button class="chip" data-chip="{{person_title}}">{{person_title}}</button>
+              <button class="chip" data-chip="{{industry}}">{{industry}}</button>
+              <button class="chip" data-chip="{{location}}">{{location}}</button>
+              <button class="chip" data-chip="{{sender_company}}">{{sender_company}}</button>
+            </div>
+          </div>
+          <div class="space-y-3">
+            <button id="ai-template-btn" class="btn-main w-full rounded-2xl py-3 text-sm">Generate with AI</button>
+            <div class="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-lv-950/50 border border-lv-500/10">
+              <button id="mode-connect" class="rounded-xl py-2 text-xs font-bold bg-teal-400 text-slate-950">Connect</button>
+              <button id="mode-dm" class="rounded-xl py-2 text-xs font-bold text-lv-300">DM</button>
+            </div>
+            <button id="preview-btn" class="btn-soft w-full rounded-2xl py-3 text-sm font-bold">Preview Campaign</button>
+            <button id="send-btn" class="btn-danger w-full rounded-2xl py-3 text-sm" disabled>Send Campaign</button>
+            <button id="export-btn" class="btn-soft w-full rounded-2xl py-3 text-sm font-bold">Export Report</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="glass rounded-3xl p-5 shadow-2xl">
+        <div class="flex flex-col md:flex-row md:items-center gap-3 mb-4">
+          <div class="flex-1">
+            <h2 class="text-sm font-bold text-white">Contacts and Results</h2>
+            <p id="result-summary" class="text-xs mt-1" style="color:var(--muted)">No campaign preview yet.</p>
+          </div>
+          <label class="flex items-center gap-2 text-xs font-bold text-lv-300">
+            <input id="select-all" type="checkbox" class="w-4 h-4 accent-teal-400">
+            Select all
+          </label>
+        </div>
+
+        <div class="overflow-x-auto rounded-2xl border border-lv-500/10">
+          <table class="w-full min-w-[1100px] text-sm">
+            <thead class="bg-lv-950/50">
+              <tr class="text-left text-[11px] uppercase tracking-wider text-lv-400">
+                <th class="px-4 py-3 w-12">Select</th>
+                <th class="px-4 py-3">Company</th>
+                <th class="px-4 py-3">Person</th>
+                <th class="px-4 py-3">Person LinkedIn</th>
+                <th class="px-4 py-3">Company LinkedIn</th>
+                <th class="px-4 py-3">Message Preview</th>
+                <th class="px-4 py-3">Status</th>
+              </tr>
+            </thead>
+            <tbody id="leads-tbody" class="divide-y divide-lv-500/10"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const state = {
+      leads: [],
+      selectedIds: new Set(),
+      sendAs: 'connection_request',
+      resultsById: new Map(),
+      theme: 'dark',
+    };
+
+    const els = {
+      themeToggle: document.getElementById('theme-toggle-btn'),
+      sessionStatus: document.getElementById('session-status'),
+      quickName: document.getElementById('quick-name'),
+      quickCompany: document.getElementById('quick-company'),
+      quickTitle: document.getElementById('quick-title'),
+      quickLinkedin: document.getElementById('quick-linkedin'),
+      addContact: document.getElementById('add-contact-btn'),
+      jsonInput: document.getElementById('json-input'),
+      importJson: document.getElementById('import-json-btn'),
+      xlsxInput: document.getElementById('xlsx-input'),
+      fetchLast: document.getElementById('fetch-last-btn'),
+      cookieInput: document.getElementById('cookie-input'),
+      saveCookie: document.getElementById('save-cookie-btn'),
+      refreshSession: document.getElementById('refresh-session-btn'),
+      enrich: document.getElementById('enrich-btn'),
+      purpose: document.getElementById('purpose-input'),
+      senderCompany: document.getElementById('sender-company'),
+      senderRole: document.getElementById('sender-role'),
+      scheduledAt: document.getElementById('scheduled-at'),
+      template: document.getElementById('template-input'),
+      charCount: document.getElementById('char-count'),
+      chips: document.getElementById('chips'),
+      aiTemplate: document.getElementById('ai-template-btn'),
+      modeConnect: document.getElementById('mode-connect'),
+      modeDm: document.getElementById('mode-dm'),
+      preview: document.getElementById('preview-btn'),
+      send: document.getElementById('send-btn'),
+      export: document.getElementById('export-btn'),
+      riskAck: document.getElementById('risk-ack'),
+      selectAll: document.getElementById('select-all'),
+      tbody: document.getElementById('leads-tbody'),
+      resultSummary: document.getElementById('result-summary'),
+      statTotal: document.getElementById('stat-total'),
+      statSelected: document.getElementById('stat-selected'),
+      statPerson: document.getElementById('stat-person'),
+      statDaily: document.getElementById('stat-daily'),
+    };
+
+    function esc(value) {
+      return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function first(...values) {
+      for (const value of values) {
+        const cleaned = String(value ?? '').trim();
+        if (cleaned) return cleaned;
+      }
+      return '';
+    }
+
+    function leadId(lead, index) {
+      if (!lead._campaign_id) {
+        lead._campaign_id = `${Date.now()}-${index}-${Math.random().toString(36).slice(2)}`;
+      }
+      return lead._campaign_id;
+    }
+
+    function normalizeLead(raw, index = 0) {
+      const lead = {};
+      Object.entries(raw || {}).forEach(([key, value]) => {
+        const normalized = String(key).trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+        lead[normalized] = value;
+      });
+      lead.company_name = first(lead.company_name, lead.company, lead.business_name, raw.Company, raw['Company Name']);
+      lead.contact_person_name = first(lead.contact_person_name, lead.person, lead.name, lead.founder_name, raw.Person, raw.Name);
+      lead.contact_person_title = first(lead.contact_person_title, lead.title, lead.role, lead.designation, raw.Title);
+      lead.company_website = first(lead.company_website, lead.website, raw.Website);
+      lead.linkedin_url = first(lead.linkedin_url, lead.person_linkedin, lead.person_linkedin_url, raw.LinkedIn, raw['Person LinkedIn']);
+      lead.person_linkedin_url = first(lead.person_linkedin_url, lead.linkedin_url);
+      lead.company_linkedin_url = first(lead.company_linkedin_url, lead.linkedin_company_url, lead.company_linkedin, raw['Company LinkedIn']);
+      lead.industry = first(lead.industry, lead.category, raw.Industry);
+      lead.location = first(lead.location, lead.city, raw.Location);
+      lead.campaign_status = lead.campaign_status || 'pending';
+      leadId(lead, index);
+      return lead;
+    }
+
+    function mergeLeads(newLeads) {
+      const existingKeys = new Set(state.leads.map(keyForLead));
+      newLeads.map(normalizeLead).forEach((lead) => {
+        const key = keyForLead(lead);
+        if (!existingKeys.has(key)) {
+          state.leads.push(lead);
+          state.selectedIds.add(leadId(lead, state.leads.length));
+          existingKeys.add(key);
+        }
+      });
+      render();
+    }
+
+    function keyForLead(lead) {
+      return [
+        first(lead.person_linkedin_url, lead.linkedin_url),
+        first(lead.contact_person_name),
+        first(lead.company_name),
+      ].join('|').toLowerCase();
+    }
+
+    function personalize(template, lead) {
+      const person = first(lead.contact_person_name, lead.founder_name, lead.name);
+      const replacements = {
+        '{{first_name}}': person ? person.split(/\s+/)[0] : 'there',
+        '{{full_name}}': person || 'there',
+        '{{company_name}}': first(lead.company_name, lead.company, 'your company'),
+        '{{person_title}}': first(lead.contact_person_title, lead.title),
+        '{{industry}}': first(lead.industry),
+        '{{location}}': first(lead.location),
+        '{{value_proposition}}': first(lead.value_proposition, lead.lead_summary),
+        '{{sender_company}}': els.senderCompany.value.trim(),
+        '{{sender_role}}': els.senderRole.value.trim(),
+      };
+      let message = template || '';
+      Object.entries(replacements).forEach(([key, value]) => { message = message.replaceAll(key, value); });
+      return message.replace(/\s+/g, ' ').trim();
+    }
+
+    function selectedLeads() {
+      return state.leads.filter((lead, index) => state.selectedIds.has(leadId(lead, index)));
+    }
+
+    function statusClass(status) {
+      return `status-pill status-${status || 'pending'}`;
+    }
+
+    function render() {
+      els.tbody.innerHTML = state.leads.map((lead, index) => {
+        const id = leadId(lead, index);
+        const result = state.resultsById.get(id);
+        const status = result?.status || lead.campaign_status || 'pending';
+        const preview = result?.message_preview || personalize(els.template.value, lead);
+        const personUrl = first(lead.person_linkedin_url, lead.linkedin_url);
+        const companyUrl = first(lead.company_linkedin_url, lead.linkedin_company_url);
+        return `
+          <tr class="lead-row">
+            <td class="px-4 py-3 align-top">
+              <input type="checkbox" class="lead-check w-4 h-4 accent-teal-400" data-id="${esc(id)}" ${state.selectedIds.has(id) ? 'checked' : ''}>
+            </td>
+            <td class="px-4 py-3 align-top">
+              <div class="font-bold text-white">${esc(first(lead.company_name, 'Unknown company'))}</div>
+              ${lead.company_website ? `<a class="text-xs text-sky-300 hover:underline" href="${esc(lead.company_website)}" target="_blank">${esc(lead.company_website)}</a>` : ''}
+            </td>
+            <td class="px-4 py-3 align-top">
+              <div class="font-bold text-white">${esc(first(lead.contact_person_name, 'Unknown person'))}</div>
+              <div class="text-xs text-lv-300/70">${esc(first(lead.contact_person_title, ''))}</div>
+            </td>
+            <td class="px-4 py-3 align-top">${personUrl ? `<a class="text-sky-300 hover:underline" href="${esc(personUrl)}" target="_blank">Open profile</a>` : '<span class="text-lv-400">Missing</span>'}</td>
+            <td class="px-4 py-3 align-top">${companyUrl ? `<a class="text-sky-300 hover:underline" href="${esc(companyUrl)}" target="_blank">Open company</a>` : '<span class="text-lv-400">Missing</span>'}</td>
+            <td class="px-4 py-3 align-top max-w-[360px]"><div class="text-xs leading-relaxed">${esc(preview)}</div></td>
+            <td class="px-4 py-3 align-top">
+              <span class="${statusClass(status)}">${esc(status)}</span>
+              ${result?.error ? `<div class="text-xs text-red-300 mt-2">${esc(result.error)}</div>` : ''}
+              ${result?.reason ? `<div class="text-xs text-amber-300 mt-2">${esc(result.reason)}</div>` : ''}
+            </td>
+          </tr>`;
+      }).join('') || `<tr><td colspan="7" class="px-4 py-10 text-center text-lv-400">Add a contact, paste JSON, or upload an XLSX file.</td></tr>`;
+
+      const people = state.leads.filter(lead => first(lead.person_linkedin_url, lead.linkedin_url)).length;
+      els.statTotal.textContent = state.leads.length;
+      els.statSelected.textContent = selectedLeads().length;
+      els.statPerson.textContent = people;
+      els.selectAll.checked = state.leads.length > 0 && selectedLeads().length === state.leads.length;
+      els.send.disabled = !els.riskAck.checked || selectedLeads().length === 0;
+      updateCharCount();
+    }
+
+    function updateCharCount() {
+      const message = personalize(els.template.value, state.leads[0] || {});
+      const count = message.length;
+      els.charCount.textContent = `${count} / 300`;
+      els.charCount.className = count > 300 ? 'text-xs text-red-300 font-bold' : 'text-xs text-lv-400';
+    }
+
+    function setLoading(button, loading, label) {
+      button.disabled = loading;
+      if (loading) {
+        button.dataset.label = button.textContent;
+        button.textContent = label || 'Working...';
+      } else {
+        button.textContent = button.dataset.label || button.textContent;
+      }
+    }
+
+    async function apiFetch(url, payload) {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || data.error || 'Request failed');
+      return data;
+    }
+
+    function scheduledIso() {
+      if (!els.scheduledAt.value) return null;
+      const date = new Date(els.scheduledAt.value);
+      return Number.isNaN(date.getTime()) ? null : date.toISOString();
+    }
+
+    function campaignPayload(dryRun) {
+      return {
+        leads: selectedLeads(),
+        message_template: els.template.value,
+        send_as: state.sendAs,
+        dry_run: dryRun,
+        scheduled_at: scheduledIso(),
+        sender_company: els.senderCompany.value.trim(),
+        sender_role: els.senderRole.value.trim(),
+      };
+    }
+
+    function applyResults(data) {
+      const selected = selectedLeads();
+      (data.details || []).forEach((detail, index) => {
+        const lead = selected[index];
+        if (!lead) return;
+        const id = leadId(lead, index);
+        state.resultsById.set(id, detail);
+        lead.campaign_status = detail.status || 'pending';
+      });
+      els.resultSummary.textContent = `Processed ${data.processed || 0}. Sent ${data.sent || 0}, scheduled ${data.scheduled || 0}, failed ${data.failed || 0}, skipped ${data.skipped || 0}.`;
+      if (data.daily_status) {
+        els.statDaily.textContent = data.daily_status.sent_today || 0;
+      }
+      render();
+    }
+
+    async function refreshCampaignStatus() {
+      try {
+        const response = await fetch('/api/linkedin-campaign/status');
+        const data = await response.json();
+        els.statDaily.textContent = data.sent_today || 0;
+      } catch (_) {}
+    }
+
+    async function checkSession() {
+      try {
+        const response = await fetch('/api/leads/linkedin_session/status');
+        const data = await response.json();
+        const active = data.status === 'active';
+        els.sessionStatus.textContent = active ? 'Active' : 'Inactive';
+        els.sessionStatus.className = active ? 'status-pill status-sent' : 'status-pill status-failed';
+      } catch (_) {
+        els.sessionStatus.textContent = 'Unknown';
+        els.sessionStatus.className = 'status-pill status-skipped';
+      }
+    }
+
+    els.addContact.addEventListener('click', () => {
+      const url = els.quickLinkedin.value.trim();
+      if (!els.quickName.value.trim() && !url && !els.quickCompany.value.trim()) return;
+      const isCompanyUrl = /linkedin\.com\/company\//i.test(url);
+      mergeLeads([{
+        contact_person_name: els.quickName.value.trim(),
+        company_name: els.quickCompany.value.trim(),
+        contact_person_title: els.quickTitle.value.trim(),
+        person_linkedin_url: isCompanyUrl ? '' : url,
+        linkedin_url: isCompanyUrl ? '' : url,
+        company_linkedin_url: isCompanyUrl ? url : '',
+      }]);
+      [els.quickName, els.quickCompany, els.quickTitle, els.quickLinkedin].forEach(el => { el.value = ''; });
+    });
+
+    els.importJson.addEventListener('click', () => {
+      try {
+        const parsed = JSON.parse(els.jsonInput.value.trim());
+        const leads = Array.isArray(parsed) ? parsed : parsed.leads || parsed.results || parsed.data || [];
+        mergeLeads(leads);
+      } catch (err) {
+        alert(`Could not parse JSON: ${err.message}`);
+      }
+    });
+
+    els.xlsxInput.addEventListener('change', async (event) => {
+      const file = event.target.files?.[0];
+      if (!file || !window.XLSX) return;
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      mergeLeads(XLSX.utils.sheet_to_json(sheet));
+      event.target.value = '';
+    });
+
+    els.fetchLast.addEventListener('click', () => {
+      const keys = ['leadgen:lastRun', 'leadgen:lastRunJson', 'lastLeadGenRun'];
+      for (const key of keys) {
+        const value = localStorage.getItem(key);
+        if (!value) continue;
+        try {
+          const parsed = JSON.parse(value);
+          const leads = Array.isArray(parsed) ? parsed : parsed.leads || parsed.results || parsed.data || [];
+          if (leads.length) {
+            mergeLeads(leads);
+            return;
+          }
+        } catch (_) {}
+      }
+      alert('No recent lead generation result was found in this browser.');
+    });
+
+    els.saveCookie.addEventListener('click', async () => {
+      const cookie = els.cookieInput.value.trim();
+      if (!cookie) return;
+      setLoading(els.saveCookie, true, 'Saving...');
+      try {
+        await apiFetch('/api/leads/linkedin_session', { cookie_value: cookie });
+        els.cookieInput.value = '';
+        await checkSession();
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        setLoading(els.saveCookie, false);
+      }
+    });
+
+    els.enrich.addEventListener('click', async () => {
+      if (!state.leads.length) return;
+      setLoading(els.enrich, true, 'Enriching...');
+      try {
+        const data = await apiFetch('/api/linkedin-campaign/enrich', { leads: state.leads });
+        state.leads = (data.leads || []).map(normalizeLead);
+        state.selectedIds = new Set(state.leads.map((lead, index) => leadId(lead, index)));
+        render();
+        els.resultSummary.textContent = `Enriched ${data.summary?.person_found || 0} person profiles and ${data.summary?.company_found || 0} company pages.`;
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        setLoading(els.enrich, false);
+      }
+    });
+
+    els.aiTemplate.addEventListener('click', async () => {
+      setLoading(els.aiTemplate, true, 'Generating...');
+      try {
+        const data = await apiFetch('/api/linkedin-campaign/generate-template', {
+          campaign_purpose: els.purpose.value,
+          industry: first(state.leads[0]?.industry),
+          sender_company: els.senderCompany.value.trim(),
+          sender_role: els.senderRole.value.trim(),
+          sample_leads: state.leads.slice(0, 3),
+        });
+        els.template.value = data.template || els.template.value;
+        render();
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        setLoading(els.aiTemplate, false);
+      }
+    });
+
+    els.preview.addEventListener('click', async () => {
+      if (!selectedLeads().length) return;
+      setLoading(els.preview, true, 'Previewing...');
+      try {
+        applyResults(await apiFetch('/api/linkedin-campaign/send', campaignPayload(true)));
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        setLoading(els.preview, false);
+      }
+    });
+
+    els.send.addEventListener('click', async () => {
+      if (!els.riskAck.checked || !selectedLeads().length) return;
+      const ok = confirm('Live LinkedIn sending can restrict the account. Send to selected contacts now, unless the schedule is in the future?');
+      if (!ok) return;
+      setLoading(els.send, true, 'Sending...');
+      try {
+        applyResults(await apiFetch('/api/linkedin-campaign/send', campaignPayload(false)));
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        setLoading(els.send, false);
+      }
+    });
+
+    els.export.addEventListener('click', () => {
+      const rows = state.leads.map((lead, index) => {
+        const result = state.resultsById.get(leadId(lead, index)) || {};
+        return {
+          Company: first(lead.company_name),
+          Person: first(lead.contact_person_name),
+          Title: first(lead.contact_person_title),
+          'Person LinkedIn': first(lead.person_linkedin_url, lead.linkedin_url),
+          'Company LinkedIn': first(lead.company_linkedin_url),
+          Status: result.status || lead.campaign_status || 'pending',
+          Message: result.message_preview || personalize(els.template.value, lead),
+          Reason: result.reason || result.error || '',
+        };
+      });
+      if (window.XLSX) {
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), 'Campaign');
+        XLSX.writeFile(workbook, `linkedin_campaign_${new Date().toISOString().slice(0,10)}.xlsx`);
+      } else {
+        const blob = new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `linkedin_campaign_${new Date().toISOString().slice(0,10)}.json`;
+        link.click();
+      }
+    });
+
+    els.selectAll.addEventListener('change', () => {
+      state.selectedIds.clear();
+      if (els.selectAll.checked) {
+        state.leads.forEach((lead, index) => state.selectedIds.add(leadId(lead, index)));
+      }
+      render();
+    });
+
+    els.tbody.addEventListener('change', (event) => {
+      if (!event.target.classList.contains('lead-check')) return;
+      const id = event.target.dataset.id;
+      if (event.target.checked) state.selectedIds.add(id);
+      else state.selectedIds.delete(id);
+      render();
+    });
+
+    els.template.addEventListener('input', render);
+    els.senderCompany.addEventListener('input', render);
+    els.senderRole.addEventListener('input', render);
+    els.riskAck.addEventListener('change', render);
+    els.refreshSession.addEventListener('click', checkSession);
+    els.chips.addEventListener('click', (event) => {
+      const chip = event.target.closest('[data-chip]');
+      if (!chip) return;
+      const start = els.template.selectionStart || els.template.value.length;
+      const end = els.template.selectionEnd || start;
+      els.template.value = els.template.value.slice(0, start) + chip.dataset.chip + els.template.value.slice(end);
+      els.template.focus();
+      els.template.selectionStart = els.template.selectionEnd = start + chip.dataset.chip.length;
+      render();
+    });
+
+    els.modeConnect.addEventListener('click', () => {
+      state.sendAs = 'connection_request';
+      els.modeConnect.className = 'rounded-xl py-2 text-xs font-bold bg-teal-400 text-slate-950';
+      els.modeDm.className = 'rounded-xl py-2 text-xs font-bold text-lv-300';
+    });
+
+    els.modeDm.addEventListener('click', () => {
+      state.sendAs = 'direct_message';
+      els.modeDm.className = 'rounded-xl py-2 text-xs font-bold bg-teal-400 text-slate-950';
+      els.modeConnect.className = 'rounded-xl py-2 text-xs font-bold text-lv-300';
+    });
+
+    els.themeToggle.addEventListener('click', () => {
+      state.theme = state.theme === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('linkedin-campaign-theme', state.theme);
+      applyTheme();
+    });
+
+    function applyTheme() {
+      document.body.classList.toggle('light-theme', state.theme === 'light');
+      els.themeToggle.textContent = state.theme === 'light' ? 'Dark Mode' : 'Light Mode';
+    }
+
+    function init() {
+      state.theme = localStorage.getItem('linkedin-campaign-theme') || localStorage.getItem('leadgen-theme') || 'dark';
+      applyTheme();
+      render();
+      checkSession();
+      refreshCampaignStatus();
+    }
+
+    init();
+  </script>
+</body>
+</html>
