@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from core.logging.schemas import AgentLog, RetrievalLog, AgentStepLog
+from core.logging.schemas import AgentStepLog
 
 
 @dataclass
@@ -37,7 +37,7 @@ class TokenTracker:
     def __init__(
         self,
         output_path: str = "logs/token_usage.csv",
-        jsonl_path: str = "logs/tutor_logs.jsonl",
+        jsonl_path: str = "logs/agent_logs.jsonl",
         steps_jsonl_path: str = "logs/agent_steps.jsonl",
     ):
         import os
@@ -99,50 +99,6 @@ class TokenTracker:
         except Exception as exc:
             print(f"Warning: Could not write event log to JSONL: {exc}")
     
-    def log_agent_interaction(
-        self,
-        session_id: str,
-        student_id: str,
-        student_class: str,
-        workflow: str,
-        user_query: str,
-        detected_subject: str,
-        ai_response: str,
-        input_tokens: int,
-        output_tokens: int,
-        latency_ms: float,
-        retrieval_count: int = 0,
-        retrieval_scores: List[float] = None
-    ):
-        retrieval = None
-        if retrieval_count > 0:
-            retrieval = RetrievalLog(
-                query=user_query,
-                collection="aurika_campus_content",
-                results_count=retrieval_count,
-                top_scores=retrieval_scores or []
-            )
-        
-        agent_log = AgentLog.create(
-            session_id=session_id,
-            student_id=student_id,
-            student_class=student_class,
-            workflow=workflow,
-            user_query=user_query,
-            detected_subject=detected_subject,
-            detected_intent="academic",
-            ai_response=ai_response[:500],
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            latency_ms=latency_ms,
-            retrieval=retrieval
-        )
-        
-        try:
-            with open(self.jsonl_path, 'a', encoding='utf-8') as f:
-                f.write(json.dumps(agent_log.to_dict(), ensure_ascii=False) + '\n')
-        except Exception as exc:
-            print(f"Warning: Could not write agent interaction log to JSONL: {exc}")
     
     def log_from_response(
         self,

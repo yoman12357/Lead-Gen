@@ -138,6 +138,24 @@ class VelitLeadPipeline(ProductionLeadPipeline):
         }
 
     async def run(
+        self, *, industry: str, location: str, seed_query: str = '',
+        target_count: int = 15, target_role: str = '', on_progress=None, is_cancelled=None,
+    ) -> Dict[str, Any]:
+        """Use the same sourced company checks as generic search and batch jobs."""
+        from core.services.lead_search_engine import LeadSearchEngine
+        from core.services.lead_search_policy import SearchIntent
+
+        async def progress(result):
+            result['metadata']['mode'] = 'velit'
+            self._partial_result = result
+            if on_progress:
+                await on_progress(result)
+
+        intent = SearchIntent(industry.strip() or 'Van Upfitters / RV Builders',
+                              normalize_velit_location(location), max(1, min(int(target_count), 100)), target_role)
+        return await LeadSearchEngine(self).run(intent, on_progress=progress, is_cancelled=is_cancelled)
+
+    async def _run_legacy(
         self,
         *,
         industry: str,

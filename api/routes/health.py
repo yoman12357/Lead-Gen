@@ -7,7 +7,7 @@ router = APIRouter()
 async def health_check():
     return {
         "status": "healthy",
-        "service": "agentic_core",
+        "service": "aryan_lead_gen",
         "version": "1.0.0"
     }
 
@@ -15,6 +15,6 @@ async def health_check():
 @router.get("/")
 async def root():
     return {
-        "message": "Agentic Core API",
+        "message": "Aryan Lead-Gen API",
         "docs": "/docs"
     }

@@ -142,9 +142,9 @@ EXCLUDED_LEAD_SOURCE_DOMAINS = (
 )
 
 _QUERY_TEMPLATES = (
-    '"{industry}" companies in "{location}" -directory -blog -jobs -yelp -glassdoor -reddit -quora -forum',
-    '"{industry}" "{location}" "contact us" "email" OR "phone" -reddit -quora -forum',
-    '"{industry}" "{location}" official website -directory -blog -news -jobs -reddit -quora -forum',
+    '{industry} company {location} contact',
+    '{industry} services "{location}" official website',
+    '{industry} "{location}" "contact us"',
 )
 
 _GOOD_DIRECTORY_PATH_MARKERS = (
@@ -235,6 +235,8 @@ def build_targeted_directory_queries(
             queries.append(normalized)
 
     if cleaned_industry and cleaned_location:
+        if re.fullmatch(r"saas(?: companies| products| platforms)?", cleaned_industry, re.I):
+            add(f'SaaS software product platform "{cleaned_location}" pricing contact -agency -outsourcing -directory')
         for template in _QUERY_TEMPLATES:
             add(template.format(industry=cleaned_industry, location=cleaned_location))
 

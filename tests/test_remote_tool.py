@@ -40,24 +40,24 @@ class FakeAsyncClient:
 
 def test_remote_tool_can_send_raw_arguments_with_header_mapping(monkeypatch):
     monkeypatch.setattr("core.tools.external.remote_tool.httpx.AsyncClient", FakeAsyncClient)
-    monkeypatch.setenv("AURIKA_ENGAGE_INTERNAL_API_KEY", "test-secret")
+    monkeypatch.setenv("CRM_API_KEY", "test-secret")
 
     tool = RemoteToolWrapper(
-        name="aurika_tasks_create_task",
-        description="Create Aurika task",
-        endpoint_url="https://engage.aurika.ai/api/internal/tasks",
+        name="crm_create_prospect",
+        description="Create a prospect in your CRM",
+        endpoint_url="https://crm.example.com/api/prospects",
         auth_header_name="Authorization",
-        auth_header_env="AURIKA_ENGAGE_INTERNAL_API_KEY",
+        auth_header_env="CRM_API_KEY",
         auth_header_prefix="Bearer ",
         request_body_mode="raw_arguments",
-        argument_headers={"x-aurika-tenant-id": "tenant_id"},
+        argument_headers={"x-tenant-id": "tenant_id"},
         omit_arguments_from_body=["tenant_id"],
     )
 
     context = ToolContext(
         session_id="SESS_TEST",
         trace_id="TRACE_TEST",
-        state={"agent_id": "task_manager_agent"},
+        state={"agent_id": "lead_gen_agent"},
     )
 
     result = asyncio.run(
@@ -73,8 +73,8 @@ def test_remote_tool_can_send_raw_arguments_with_header_mapping(monkeypatch):
 
     assert result.ok is True
     assert FakeAsyncClient.last_request["method"] == "POST"
-    assert FakeAsyncClient.last_request["url"] == "https://engage.aurika.ai/api/internal/tasks"
+    assert FakeAsyncClient.last_request["url"] == "https://crm.example.com/api/prospects"
     assert FakeAsyncClient.last_request["headers"]["Authorization"] == "Bearer test-secret"
-    assert FakeAsyncClient.last_request["headers"]["x-aurika-tenant-id"] == "tenant_001"
+    assert FakeAsyncClient.last_request["headers"]["x-tenant-id"] == "tenant_001"
     assert "tenant_id" not in FakeAsyncClient.last_request["json"]
     assert FakeAsyncClient.last_request["json"]["title"] == "Create marketing agent landing page"

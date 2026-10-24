@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Agentic Core — Dashboard</title>
+  <title>Aryan — Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/aryan-icon.svg" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script>tailwind.config = { theme: { extend: { colors: { brand: { DEFAULT:'#6366f1', dark:'#4f46e5', light:'#818cf8' } } } } }</script>
   <style>
@@ -44,14 +45,15 @@
     textarea { resize:none; }
     #wf-chat-input, #ag-chat-input { max-height:120px; overflow-y:auto; }
   </style>
+  <link rel="stylesheet" href="/assets/workspace.css" />
 </head>
 <body class="min-h-screen">
 
 <!-- ── Header ── -->
 <header class="border-b border-[#2a2a3a] px-6 py-3.5 flex items-center gap-3 flex-shrink-0">
   <div class="w-7 h-7 rounded-lg bg-brand flex items-center justify-center text-white text-sm font-bold">A</div>
-  <span class="font-semibold text-white tracking-tight">Agentic Core</span>
-  <span class="text-[#3a3a50] text-sm ml-1">/ Dashboard</span>
+  <span class="font-semibold text-white tracking-tight">Operations Console</span>
+  <span class="text-[#3a3a50] text-sm ml-1">/ Live orchestration</span>
   <div class="ml-auto flex items-center gap-3">
     <a href="/leads" class="text-xs text-[#64748b] hover:text-[#818cf8] transition-colors px-2 py-1 rounded-md hover:bg-[#1e1e30]">Lead Generator</a>
     <a href="/velit-batch-scheduler" class="text-xs text-[#64748b] hover:text-[#818cf8] transition-colors px-2 py-1 rounded-md hover:bg-[#1e1e30]">Automation</a>
@@ -60,6 +62,20 @@
     <span id="status-text" class="text-xs text-[#64748b]">Connecting…</span>
   </div>
 </header>
+
+<section class="command-strip" aria-labelledby="command-title">
+  <div>
+    <p class="command-strip-kicker">AI intelligence command center</p>
+    <h1 id="command-title">Run research, leads and agents from one workspace.</h1>
+    <p class="command-strip-copy">Select a configured workflow or agent below, inspect its real execution path, and keep every request tied to the existing backend runtime.</p>
+  </div>
+  <nav class="command-actions" aria-label="Quick actions">
+    <a class="command-action" href="/leads">Generate leads</a>
+    <a class="command-action" href="/email-verifier">Verify contacts</a>
+    <a class="command-action" href="/velit-batch-scheduler">Schedule Velit</a>
+    <a class="command-action" href="/studio">Manage agents</a>
+  </nav>
+</section>
 
 <div class="flex" style="height:calc(100vh - 53px)">
 
@@ -289,7 +305,7 @@ let selectedWorkflow = null
 let selectedAgent    = null
 
 // per-item session IDs and modes
-const sessions = {}  // { 'wf:task_manager_pipeline': 'SESS_xxx', 'ag:research_assistant': 'SESS_yyy' }
+const sessions = {}  // { 'wf:research_pipeline': 'SESS_xxx', 'ag:research_assistant': 'SESS_yyy' }
 const modes    = { wf: 'chat', ag: 'chat' }
 
 // attachment state
@@ -923,5 +939,6 @@ function escHtml(s) {
 
 init()
 </script>
+  <script src="/assets/workspace.js"></script>
 </body>
 </html>

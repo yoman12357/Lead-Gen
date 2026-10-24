@@ -14,13 +14,13 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 tool_name: create_product                          # Must be unique across all tools
-description: Creates a new product in Aurika OS   # Shown to the LLM; be specific
-endpoint_url: https://aurika-os.com/tools/create_product
+description: Creates a prospect in your CRM      # Shown to the LLM; be specific
+endpoint_url: https://crm.example.com/api/prospects
 endpoint_url_env: ""                              # Optional env var to override endpoint_url locally
 
 # Optional auth — the header value is read from an env var at runtime
 auth_header_name: X-Internal-Key   # HTTP header name to send
-auth_header_env: AURIKA_OS_API_KEY  # env var in .env that holds the secret value
+auth_header_env: CRM_API_KEY        # env var in .env that holds the secret value
 auth_header_prefix: ""              # Optional, e.g. "Bearer "
 
 timeout_seconds: 30

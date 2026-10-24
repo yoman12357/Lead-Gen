@@ -86,7 +86,9 @@ def _check(name: str, status: str, detail: str = "", **extra) -> dict:
 
 def _resolve_mx_records(dns_resolver, domain: str) -> tuple[list, str]:
     try:
-        return list(dns_resolver.resolve(domain, "MX")), "default"
+        return list(dns_resolver.resolve(domain, "MX", lifetime=6)), "default"
+    except (dns_resolver.NXDOMAIN, dns_resolver.NoAnswer):
+        raise
     except Exception as default_exc:
         resolver = dns_resolver.Resolver(configure=False)
         resolver.nameservers = list(FALLBACK_DNS_NAMESERVERS)
@@ -186,7 +188,7 @@ def verify_email_legitimacy(email: str, sender_email: str = "verify@agentic-core
     # 1. Syntax Validation
     try:
         valid = validate_email(raw_email, check_deliverability=False)
-        email = valid.email
+        email = valid.normalized
         local_part, domain = email.split("@", 1)
         is_role, role_type = _is_role_email(email)
         result.update(
@@ -232,7 +234,14 @@ def verify_email_legitimacy(email: str, sender_email: str = "verify@agentic-core
     try:
         raw_records, resolver_source = _resolve_mx_records(_dns_resolver, domain)
         records = sorted(raw_records, key=lambda record: int(record.preference))
-        mx_records = [str(record.exchange).rstrip(".") for record in records]
+        mx_records = [str(record.exchange).rstrip(".") for record in records if str(record.exchange).rstrip(".")]
+        if not mx_records:
+            result["domain_found"] = True
+            result["message"] = "Domain publishes no usable mail exchanger (null MX)."
+            result["checks"].append(_check("dns_mx_lookup", "failed", result["message"]))
+            result["duration_ms"] = round((time.perf_counter() - started_at) * 1000)
+            _log_stage("dns_mx_lookup", result, "failed", result["message"])
+            return result
         mx_record = mx_records[0]
         result["domain_found"] = True
         result["mx_found"] = True
@@ -252,7 +261,10 @@ def verify_email_legitimacy(email: str, sender_email: str = "verify@agentic-core
             resolver_source=resolver_source,
         )
     except Exception as exc:
-        result["message"] = f"No MX records found for {domain}: {type(exc).__name__}"
+        definitive = isinstance(exc, (_dns_resolver.NXDOMAIN, _dns_resolver.NoAnswer))
+        result["status"] = "invalid" if definitive else "unconfirmed"
+        result["message"] = (f"No MX records found for {domain}: {type(exc).__name__}" if definitive
+                             else f"DNS check was inconclusive for {domain}: {type(exc).__name__}")
         result["checks"].append(_check("dns_mx_lookup", "failed", result["message"]))
         result["duration_ms"] = round((time.perf_counter() - started_at) * 1000)
         _log_stage("dns_mx_lookup", result, "failed", result["message"])

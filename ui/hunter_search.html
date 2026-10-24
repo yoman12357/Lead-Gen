@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Agentic Core - Hunter Search (Test)</title>
+  <title>Aryan — Hunter Search (Test)</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/aryan-icon.svg" />
   <meta name="description" content="Hunter.io test pipeline for B2B lead discovery." />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -240,6 +241,7 @@
     body.light-theme .text-sky-400 { color: #0369a1 !important; }
     body.light-theme .text-red-400 { color: #b91c1c !important; }
   </style>
+  <link rel="stylesheet" href="/assets/workspace.css" />
 </head>
 <body>
   <nav class="glass sticky top-0 z-50 px-8 py-4 flex items-center justify-between border-b border-lv-900/50">
@@ -1043,5 +1045,6 @@
     setMode('generic');
     applyTheme(localStorage.getItem('hunter-search-theme') === 'light');
   </script>
+  <script src="/assets/workspace.js"></script>
 </body>
 </html>

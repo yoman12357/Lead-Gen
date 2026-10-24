@@ -99,7 +99,7 @@ class FirestoreClient:
         _init_firebase()
         from firebase_admin import firestore as fb_firestore
         self._db = fb_firestore.client()
-        self.business_id = business_id or os.getenv("FIRESTORE_BUSINESS_ID", "aurika-agentic-core")
+        self.business_id = business_id or os.getenv("FIRESTORE_BUSINESS_ID", "aryan-lead-gen")
 
     def _col(self, collection: str):
         """Return a CollectionReference scoped to this business."""

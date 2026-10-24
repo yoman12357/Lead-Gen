@@ -6,7 +6,7 @@ import json
 import re
 from html.parser import HTMLParser
 from typing import Dict, List
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 
 VENTO_SEARCH_DEPTH = "basic"
 VENTO_MAX_DISCOVERY_QUERIES = 6
@@ -67,7 +67,7 @@ ENRICHMENT_QUERY_TEMPLATES: Dict[str, str] = {
     "pet_grooming": '"{name}" "{location}" phone email website contact',
 }
 
-EMAIL_RE = re.compile(r"[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.I)
+EMAIL_RE = re.compile(r"[A-Z0-9.!#$%&'*+=?^_`{|}~-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.I)
 PHONE_RE = re.compile(
     r"(?<!\d)(?:\+?1[\s.()-]?)?\(?[2-9]\d{2}\)?[\s.-]?[2-9]\d{2}[\s.-]?\d{4}(?!\d)"
 )
@@ -228,7 +228,12 @@ def extract_social_profile_name(content: str, platform: str, expected_handle: st
 def build_discovery_queries(category: str, location: str) -> List[str]:
     if category not in VALID_CATEGORIES:
         raise ValueError(f"Unsupported Vento category: {category}")
-    return [template.format(location=location) for template in DISCOVERY_QUERIES[category]]
+    queries = [template.format(location=location) for template in DISCOVERY_QUERIES[category]]
+    if category == 'dog_parent_influencers':
+        # Profile bios rarely contain a literal comma-separated city/state.
+        place = ' '.join(part.strip() for part in location.split(','))
+        queries = [query.replace('"' + location + '"', place) + (' -inurl:/video/' if 'tiktok.com' in query else ' -inurl:/p/ -inurl:/reel/ -inurl:/stories/') for query in queries]
+    return queries
 
 
 def build_enrichment_query(category: str, name: str, location: str) -> str:
@@ -239,8 +244,15 @@ def build_enrichment_query(category: str, name: str, location: str) -> str:
 
 def extract_emails(text: str) -> List[str]:
     emails: List[str] = []
-    for match in EMAIL_RE.findall(html.unescape(str(text or ""))):
+    from email_validator import validate_email, EmailNotValidError
+    body = unquote(html.unescape(str(text or '')))
+    body = re.sub(r'(?:https?://|www\.)[^\s<>"\']+', ' ', body, flags=re.I)
+    for match in EMAIL_RE.findall(body):
         email = match.lower().strip(".,;:()[]{}")
+        try:
+            validate_email(email, check_deliverability=False)
+        except EmailNotValidError:
+            continue
         local, domain = email.rsplit("@", 1)
         if domain in _NOISE_EMAIL_DOMAINS or local in _NOISE_EMAIL_LOCALS or email in emails:
             continue

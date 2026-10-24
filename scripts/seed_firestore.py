@@ -33,7 +33,7 @@ async def seed(force: bool = False, dry_run: bool = False):
     from core.db.agent_store import AgentStore
     from core.db.workflow_store import WorkflowStore
 
-    business_id = os.getenv("FIRESTORE_BUSINESS_ID", "aurika-agentic-core")
+    business_id = os.getenv("FIRESTORE_BUSINESS_ID", "aryan-lead-gen")
     print(f"\n{'[DRY RUN] ' if dry_run else ''}Seeding Firestore for business: {business_id}\n")
 
     loader = ConfigLoader()

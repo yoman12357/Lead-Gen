@@ -1,308 +1,128 @@
-# Lead-Gen
+# Aryan — Lead-Gen
 
-AI-powered Learning Tutor backend with image generation and Qdrant vector search.
+Aryan's personal workspace for discovering companies and people, enriching contact details, verifying email/phone data, and exporting leads.
 
 ## Features
 
-- 🎓 **AI Learning Tutor** - Personalized tutoring with memory and context
-- 🖼️ **Image Generation** - Auto-generate educational diagrams with Gemini
-- 📚 **Qdrant Search** - Vector-based content retrieval
-- 👤 **Student Profiles** - Google Sheets integration for personalization
-- 📦 **R2 Storage** - Image upload and CDN delivery
+- Generic B2B business discovery followed by official-website enrichment.
+- Velit van/RV company discovery and a multi-location batch scheduler.
+- Vento influencer discovery, social enrichment, scoring, and deduplication.
+- Hunter company/contact search and optional company research reports.
+- Bulk email/phone verification, JSON/CSV/XLSX exports, and optional Google Sheets persistence.
+- Agent Studio backed by Firestore; optional Qdrant knowledge retrieval for research.
 
-## Quick Start
+## Run locally
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Copy environment file
-cp .env.example .env
-# Edit .env with your API keys
-
-# Run server
-uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+```powershell
+python -m pip install -r requirements.txt
+# On a fresh checkout only: Copy-Item .env.example .env
+# Fill .env with your own credentials; keep existing configured .env files.
+python -X utf8 -m uvicorn api.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-## API Endpoints
+Open http://localhost:8000. API documentation is available at /docs.
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/api/learning/chat/{student_id}` | POST | Chat with tutor |
-| `/api/image/generate` | POST | Generate image |
-| `/api/blocks/llm` | POST | Run a generic LLM prompt |
-| `/api/blocks/rag` | POST | Run RAG agent (query + retrieval) |
-| `/api/blocks/extract/json` | POST | Extract JSON from text |
-| `/api/blocks/extract/image-metadata` | POST | Extract image metadata JSON |
-| `/api/blocks/file/analyze` | POST | Analyze a document with vision |
-| `/api/blocks/transcribe` | POST | Transcribe audio (Gemini) |
-| `/api/agent/chat` | POST | Generic agent (memory + RAG + JSON output) |
-| `/api/agent/run` | POST | Tool-calling agent kernel run by `agent_id`; accepts JSON or multipart file uploads |
-| `/api/workflow/run` | POST | Hybrid fixed + flexible workflow run by `workflow_id` |
+## Lead quality checks
 
-## Agent Kernel and Workflow Engine
+The main discovery pipeline checks official websites, category/location evidence, contact sources, and international phone formats before returning leads. Company inboxes are preserved; unknown people stay blank. `Needs_Review` means a company contact was found but a person or email deliverability remains unconfirmed. A successful website request is never counted as email verification. Phone validation confirms numbering format, not live ownership or reachability.
 
-New additive components:
+Generic and Velit now share the same bounded company engine. It discovers businesses, resolves official websites from relevant directory sections or named-business searches, and checks the companies themselves. Directory/publisher contacts never become the listed company's contacts. The crawler follows contact/location/team links, reads business-owned structured addresses and public team cards, pairs office contacts, and records published WhatsApp/social links. It does not infer WhatsApp availability from a phone number or generate employee email addresses.
 
-- `config/agents/*.yaml` defines reusable agent specs (`allowed_tools`, limits, prompts, response mode).
-- `core/agents/kernel.py` runs decision loop (`tool_call` / `final_answer`) with step limits and tracing.
-- `core/tools/*` provides a pluggable tool registry and executor.
-- `config/workflows/*.yaml` defines fixed-flow orchestration with agent/tool/llm/rag nodes.
-- `config/workflow_profiles/*.yaml` defines data-owned classification dimensions and allowed values.
-- `core/orchestration/engine.py` executes workflow transitions.
+HTTP requests retry transient failures, reuse page results and remain inside the run deadline. Once results start arriving, a run stops after 90 seconds without another verified business (`LEAD_SEARCH_IDLE_SECONDS`, 0 disables this) rather than spending the remaining budget on an unproductive tail. Public JavaScript shells can use a local Playwright browser (up to three sites per run); indexed official-site extraction provides an independent fallback. For Chromium, run `python -m playwright install chromium`. Windows can instead use installed Edge with `LEAD_BROWSER_CHANNEL=msedge`. Set `LEAD_RENDER_JS=false` to disable rendering. Challenge/login pages remain unavailable rather than being treated as scraped data.
 
-This does not replace existing blocks/routes; it adds an opt-in orchestration layer.
+Vento retains its pet-business/creator model and batch/CSV history support. Its website scraper shares structured-data and source extraction, follows several contact pages in parallel and validates redirect destinations before requesting them. Business contacts come from official pages. Creator searches prefer profile results, validate email syntax, and require explicit pet-niche/location evidence before a production run accepts them. Profile follower counts do not by themselves prove local relevance.
 
-### Profile-Driven Conversation Classification
+Generic and Velit searches persist incrementally, support refresh recovery/cancellation, and expose reported Tavily usage. Historical saved results are marked as predating the newer quality policy. Company search targets are 1–50 for Generic and 1–100 for Velit; Vento retains its 1–200 cap. Counts are targets: sparse markets, blocked sources, budgets and missing evidence produce explicit shortfalls. An incomplete provider usage report is a lower bound, not a claim of exact billing.
 
-The workflow engine now supports a `classification` node type for cases where you do not need a full autonomous agent.
+See [SCRAPING_UPGRADE_AUDIT.md](SCRAPING_UPGRADE_AUDIT.md) for this upgrade's confirmed defects and verification. Reproduce selected live API/export checks with `python -X utf8 -m scripts.verify_scraping_upgrade --case texas-rv --case velit-california --case accountants-london --case vento-grooming --case vento-creators --output exports/my-audit` (uses provider credits; refuses to overwrite previous runs). `LEAD_TEST_BROWSER=1` enables the optional real JavaScript-rendering integration test when running pytest.
 
-- The workflow points to a profile in `config/workflow_profiles/*.yaml`.
-- The profile defines dimensions, allowed values, and instructions.
-- The engine builds the JSON schema and classification prompt from the profile.
-- Adding a new dimension or enum value becomes a profile change, not an engine change.
+Use `SaaS Development` for software agencies; `SaaS` searches for subscription products. The system can return fewer leads than requested when evidence is insufficient.
 
-Included V1 example:
+Run `python -X utf8 -m scripts.verify_lead_quality` for small live tests across three categories (uses configured API credits; sends no outreach). Results and a checked Excel workbook are saved locally under `exports/quality-audit/`. Run `python -X utf8 -m scripts.verify_lead_ui` against the local server for a browser/Excel regression check with synthetic data.
 
-- Workflow id: `email_auto_ticketing_v1`
-- Profile id: `email_auto_ticketing_v1`
-- Purpose: classify inbound heater/AC/support emails into structured ticket fields
+For the current persisted search API, start the server and run `python -X utf8 -m scripts.verify_pipeline_matrix`. It tests marketing in Mumbai, accountants in London, SaaS development in Delhi, and van/RV builders in Hawaii, requesting two leads per market. It saves raw job results, a summary, and a reopened/checked workbook under `exports/pipeline-audit/`. A sparse market can return a documented shortfall. This uses configured search/enrichment credits and sends no outreach. `python -X utf8 -m scripts.verify_lead_platform_ui` checks browser recovery, cancellation, mode routing, responsive layouts and Excel export using synthetic API responses.
 
-### Task Manager Agent (Sheets-backed + Aurika Tasks)
+Persisted searches and the Velit scheduler currently require **one long-running application worker**, a writable persistent `data/` directory, and persistent exports storage. In-process background jobs and local SQLite/JSON state are unsuitable for ephemeral serverless execution or multiple workers; use a shared durable queue and database before such deployments. Generic searches cap at 50 leads, two concurrent jobs and ten active/queued jobs. Query and time budgets are configurable with `LEAD_SEARCH_QUERY_BUDGET` and `LEAD_SEARCH_MAX_SECONDS`; transient safe reads retry once within the run deadline. Restarted searches retain saved results and become `interrupted`; they are not silently reissued against paid providers.
 
-Added a first task-management agent:
+See [LEAD_PIPELINE_AUDIT.md](LEAD_PIPELINE_AUDIT.md) for architecture, root causes, fixes, and verification evidence.
 
-- Agent id: `task_manager_agent`
-- Prompt: `config/prompts/agents/task_manager_agent.txt`
-- Workflow id: `task_manager_pipeline`
-- Tools: `todo_ensure_store`, `todo_create`, `todo_list`, `todo_update`, `todo_complete`, `aurika_tasks_create_task`
+The larger 15-per-market quality review is documented in [LEAD_15_QUALITY_AUDIT.md](LEAD_15_QUALITY_AUDIT.md). Use `--count 15` with the matrix verifier to test volume, `scripts.review_lead_quality` to capture independent official-source/contact evidence, and `scripts.build_quality_review_report` with explicit per-company manual decisions to export a reviewed workbook. Saved terminal results can be checked again with `--replay`, without restarting paid searches.
 
-Behavior:
-- Reads pending tasks
-- Proposes writes first
-- Requires explicit confirmation before create/update/complete (`confirmed=true`)
-- Can create formal Aurika tasks via `POST https://engage.aurika.ai/api/internal/tasks`
+## Pages
 
-### Live Agent Runtime Logs (Terminal + File)
+| Page | Path |
+|---|---|
+| Dashboard / research agents | `/` |
+| Lead generation | `/leads` |
+| Batch scheduling | `/velit-batch-scheduler` |
+| Bulk contact verification | `/email-verifier` |
+| Agent Studio | `/studio` |
+| Hunter search | `/hunter-search` |
+| Company research (optional) | `/company-chat` |
 
-Runtime tracing is now emitted in real time:
+Enable company research with `ENABLE_COMPANY_CHAT_INTEL=true`. Hunter and Vento have their own feature flags in `.env.example`.
 
-- Logger: `agent.runtime`
-- Terminal: structured logs for agent start/end, decisions, tool calls, workflow nodes
-- File: `logs/agent_runtime.log` (rotates daily)
-- Step JSONL: `logs/agent_steps.jsonl`
-- Remote tool debug events: `remote_tool_request`, `remote_tool_response`, `remote_tool_http_error`, `remote_tool_timeout`
+## Your credentials
 
-Useful environment variables:
+| Setting | Purpose |
+|---|---|
+| `GOOGLE_API_KEY` | Gemini reasoning, extraction, and optional knowledge embeddings |
+| `TAVILY_API_KEY` | Web search and company/social discovery |
+| `HUNTER_API_KEY` | Hunter search and verification |
+| `APIFY_API_TOKEN` | Optional Instagram/TikTok enrichment |
+| `FIREBASE_CREDENTIALS_PATH` | Your Firebase service-account file |
+| `FIRESTORE_BUSINESS_ID` | Your workspace namespace; defaults to `aryan-lead-gen` |
+| `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_COLLECTION` | Optional company/document knowledge search |
+| `GOOGLE_CREDENTIALS_PATH`, `TODO_SHEET_ID` | Optional Google Sheets lead persistence |
+| `APOLLO_API_KEY`, `GOOGLE_PEOPLE_API_TOKEN` | Optional Apollo and Google Contacts enrichment |
+| `AGENTIC_CORE_API_KEY` | Your application API secret, required in production |
+| `ALLOWED_ORIGINS`, `PUBLIC_BASE_URL` | Public deployment origin and URL |
 
-- `AGENT_RUNTIME_LOG_PATH` (default `logs/agent_runtime.log`)
-- `AGENT_STEPS_LOG_PATH` (default `logs/agent_steps.jsonl`)
+The `TODO_*` names remain for compatibility with the shared lead spreadsheet store. They do not enable a separate task-management agent.
 
-### Chat Request
+For Sheets, enable the Sheets API in your own Google project, create a spreadsheet in your account, share it with your service-account email as Editor, and set `TODO_SHEET_ID`. If using file credentials, leave `GOOGLE_SERVICE_ACCOUNT_JSON` and its base64 alternative blank. Enable Drive API only if using Drive features.
 
-```json
-{
-  "query": "explain photosynthesis",
-  "studentId": "student-001",
-  "businessId": "B001"
-}
+## Firestore
+
+The backend reads and writes under:
+
+```text
+businesses/aryan-lead-gen/
+  agents/{agent_id}
+  workflows/{workflow_id}
+  remote_tools/{tool_name}
+  agent_directory/{agent_id}
 ```
 
-### Chat Response
+Collections appear when the first document is written. Preview and initialize the included lead/research library:
 
-```json
-{
-  "success": true,
-  "response": {
-    "text": "Photosynthesis is the process..."
-  },
-  "metadata": {
-    "image_url": "https://pub-xxx.r2.dev/diagram.png",
-    "image_generated": true
-  }
-}
+```powershell
+python -X utf8 scripts/seed_firestore.py --dry-run
+python -X utf8 scripts/seed_firestore.py
 ```
 
-## Environment Variables
+The seed command skips existing documents unless `--force` is supplied. Restart the server after seeding, or use `POST /api/admin/reload` to reload definitions.
 
-See `.env.example` for all required variables:
+## API groups
 
-| Variable | Description |
-|----------|-------------|
-| `GOOGLE_API_KEY` | Gemini API key |
-| `QDRANT_URL` | Qdrant vector database URL |
-| `QDRANT_API_KEY` | Qdrant API key |
-| `QDRANT_COLLECTION` | Default collection for image upserts (RAG calls pass collection per request) |
-| `GOOGLE_SHEETS_STUDENTS_ID` | Student profiles sheet ID |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | Service account JSON |
-| `R2_ENDPOINT` | Cloudflare R2 endpoint |
-| `R2_ACCESS_KEY_ID` | R2 access key |
-| `R2_SECRET_ACCESS_KEY` | R2 secret key |
-| `R2_BUCKET_NAME` | R2 bucket name |
-| `R2_PUBLIC_URL` | R2 public URL prefix |
-| `ALLOWED_ORIGINS` | Comma-separated CORS origins |
-| `REQUEST_LOG_PATH` | Request log file path (default: logs/requests.log) |
-| `LLM_PROVIDER` | Primary LLM provider (Gemini by default) |
-| `LLM_FALLBACKS` | Comma-separated fallback providers |
-| `GEMINI_MODEL` | Gemini model name |
-| `GEMINI_EMBEDDING_MODEL` | Gemini embedding model |
-| `GEMINI_TRANSCRIPTION_MODEL` | Gemini audio transcription model |
-| `ANTHROPIC_API_KEY` | Anthropic API key (optional) |
-| `ANTHROPIC_MODEL` | Anthropic model name |
-| `AGENTS_DIR` | Agent specs directory (default: `config/agents`) |
-| `WORKFLOW_SPECS_DIR` | Workflow specs directory (default: `config/workflows`) |
-| `WORKFLOW_PROFILES_DIR` | Workflow profile directory (default: `config/workflow_profiles`) |
-| `AGENT_STEPS_LOG_PATH` | Step-by-step agent decision/tool log path |
-| `AURIKA_TASKS_API_URL` | Optional override for the Aurika task API endpoint, useful for local testing against `http://localhost:3000/api/internal/tasks` |
-| `AURIKA_ENGAGE_INTERNAL_API_KEY` | Bearer token used by `aurika_tasks_create_task` |
-| `AGENTIC_CORE_API_KEY` | Optional inbound API key; when set, `/api/*` requires `X-API-Key` or `Authorization: Bearer` |
-| `AGENTIC_CORE_API_KEY_HEADER` | Optional inbound API-key header name (default: `X-API-Key`) |
-| `AGENT_UPLOAD_MAX_FILE_MB` | Max single attachment size for `/api/agent/run` uploads (default: 30) |
-| `AGENT_UPLOAD_MAX_TOTAL_MB` | Max combined attachment size for `/api/agent/run` uploads (default: 60) |
-| `AGENT_ATTACHMENT_MAX_EXTRACTED_CHARS` | Max extracted text characters injected per attachment (default: 120000) |
-| `TAVILY_API_KEY` | Tavily API key for `web_search`/`web_research` tools |
-| `ALLOWED_HTTP_TOOL_DOMAINS` | Optional comma-separated allowlist for `http_request` tool |
-| `GOOGLE_DRIVE_FOLDER_ID` | Drive folder id where todo spreadsheet is created |
-| `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | Optional base64-encoded service account JSON |
-| `TODO_SHEET_ID` | Optional fixed spreadsheet id for todo store (recommended to avoid Drive create/quota issues) |
-| `TODO_SHEET_FILE_NAME` | Spreadsheet file name for todo storage |
-| `TODO_WORKSHEET_NAME` | Todo worksheet/tab name |
-| `TODO_AUDIT_WORKSHEET` | Audit worksheet/tab name |
+- `/api/leads`: discovery, lead runs, contact enrichment, exports, and LinkedIn session setup.
+- `/api/workflow` and `/api/agent`: lead/research workflows and tool-calling agents.
+- `/api/email-verification`: workbook email/phone verification.
+- `/api/velit-batch`: scheduling and batch exports.
+- `/api/vento`: influencer discovery and imported-lead processing.
+- `/api/hunter`: optional Hunter pipeline.
+- `/api/admin`, `/api/directory`, `/api/studio`: Firestore definitions and Studio.
+- `/api/blocks`: reusable LLM, knowledge retrieval, document analysis, JSON extraction, and audio transcription.
 
-## Model Profiles
-
-Define per-task model configs in `config/models.yaml` and reference them with `model_profile`
-in block or agent requests.
-
-Example:
-
-```yaml
-profiles:
-  small:
-    provider: gemini
-    model: gemini-2.5-flash
-    temperature: 0.2
-    max_tokens: 512
-  large:
-    provider: gemini
-    model: gemini-2.5-pro
-    temperature: 0.5
-    max_tokens: 4096
-```
-
-Use it in a request:
-
-```bash
-curl -X POST http://localhost:8000/api/blocks/llm \
-  -H "Content-Type: application/json" \
-  -d '{"prompt":"Summarize Newton\\u2019s laws","model_profile":"small"}'
-```
-
-## Vector Store Configuration
-
-Each workflow can define its own vector store and metadata filters in
-`config/workflow_settings/<workflow>.json`. Every RAG/Agent call must provide a
-`collection_name`, either explicitly in the request or via the workflow config.
-
-Example workflow config:
-
-```json
-{
-  "workflow": "campus_learning_agent",
-  "vector_store": {
-    "provider": "qdrant",
-    "collection": "aurika_campus",
-    "filters": {
-      "must": [
-        { "field": "course", "op": "eq", "value": "{{course}}" },
-        { "field": "level", "op": "eq", "value": "{{level}}" },
-        { "field": "subject", "op": "eq", "value": "{{subject}}" }
-      ],
-      "should": [
-        { "field": "topic", "op": "eq", "value": "{{topic}}" }
-      ],
-      "minimum_should_match": 1
-    }
-  }
-}
-```
-
-Example request override:
-
-```bash
-curl -X POST http://localhost:8000/api/blocks/rag \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query":"Explain photosynthesis",
-    "collection_name":"aurika_campus",
-    "filters":{"must":[{"field":"subject","op":"eq","value":"Biology"}]}
-  }'
-```
-
-Use a workflow config instead:
-
-```bash
-curl -X POST http://localhost:8000/api/blocks/rag \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query":"Explain photosynthesis",
-    "workflow_name":"learning_tutor",
-    "context":{"course":"NCERT","level":"Class_10","subject":"Science"}
-  }'
-```
-
-## Project Structure
-
-```
-agentic-core/
-├── api/
-│   ├── main.py           # FastAPI app
-│   ├── routes/
-│   │   ├── health.py     # Health check
-│   │   ├── learning.py   # Learning tutor
-│   │   └── image.py      # Image generation
-│   └── schemas.py        # Pydantic models
-├── core/
-│   ├── adapters/
-│   │   └── gemini.py     # Gemini LLM adapter
-│   ├── retrieval/
-│   │   └── qdrant_client.py  # Qdrant search
-│   └── services/
-│       ├── image_generator.py   # Image generation
-│       ├── r2_uploader.py       # R2 upload
-│       ├── student_profile.py   # Google Sheets
-│       └── subject_analyzer.py  # Subject detection
-├── workflows/
-│   ├── learning_tutor.py   # Main tutor workflow
-│   └── image_workflow.py   # Image generation workflow
-└── config/
-    ├── prompts/
-    │   └── learning_tutor.txt  # System prompt
-    └── workflow_settings/
-        └── learning_tutor.json # Workflow config
-```
+LinkedIn enrichment requires your own authorized session. The existing LinkedIn campaign HTML is an experimental preview with no campaign backend route; it is not a completed sending integration.
 
 ## Development
 
-```bash
-# Run with hot reload
-uvicorn api.main:app --reload --port 8000
-
-# Run tests (if any)
-pytest
+```powershell
+python -m pip install -r requirements-dev.txt
+python -X utf8 -m pytest
 ```
 
-## Audio Transcription
+Lead data, exports, `.env`, Firebase keys, and LinkedIn sessions are excluded from Git. Generic, Velit, and Vento pipelines share the same runtime infrastructure; keep their verification, scraping, document, and export dependencies installed.
 
-The `/api/blocks/transcribe` endpoint uses Gemini in batch mode (no storage).
-
-```bash
-curl -X POST http://localhost:8000/api/blocks/transcribe \
-  -F "file=@/path/to/audio.m4a" \
-  -F "language=en"
-```
-
-## License
-
-MIT
+Educational tutoring, student profiles, generated teaching images, support-ticket workflows, script-writing agents, and Aurika task-service integrations have been removed from the active project.

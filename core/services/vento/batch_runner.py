@@ -177,6 +177,7 @@ class VentoBatchRunner:
                         "shortfall": max(0, target_per_location - len(leads)),
                         "duration_seconds": round(time.perf_counter() - run_started, 2),
                         "metrics": metrics,
+                        "provider_usage": result.get('provider_usage', {}),
                     }
                 )
             except asyncio.TimeoutError:
@@ -211,6 +212,11 @@ class VentoBatchRunner:
             "shortfall": max(0, total_target - len(accepted)),
             "leads": accepted,
             "runs": location_runs,
+            "provider_usage": {
+                "tavily_reported_credits": sum((run.get('provider_usage', {}).get('tavily') or {}).get('reported_credits', 0) for run in location_runs),
+                "complete": all((run.get('provider_usage', {}).get('tavily') or {}).get('complete', False) for run in location_runs),
+                "per_location": [{'location': run['location'], **run.get('provider_usage', {})} for run in location_runs],
+            },
             "metrics": {
                 **aggregate_metrics,
                 "usable": len(accepted),

@@ -181,7 +181,7 @@ async def run_workflow(request: WorkflowRunRequest):
         return await _run_pipeline_workflow(
             request,
             pipeline_cls=ProductionLeadPipeline,
-            max_target_count=20,
+            max_target_count=50,
             pipeline_label="production_lead_pipeline",
         )
     if request.workflow_id == "velit_lead_generation_pipeline":
@@ -256,6 +256,8 @@ async def _run_pipeline_workflow(
     message = str(payload.get("message") or "")
     industry = str(context.get("industry") or "").strip()
     location = str(context.get("location") or "").strip()
+    if not (2 <= len(industry) <= 160 and 2 <= len(location) <= 160):
+        raise HTTPException(status_code=422, detail="Industry and location must each contain 2 to 160 characters.")
     try:
         target_count = int(context.get("target_lead_count") or 15)
     except (TypeError, ValueError):
@@ -298,7 +300,7 @@ async def _run_pipeline_workflow(
         },
     }
     return WorkflowRunResponse(
-        success=True,
+        success=metadata.get("stage") != "failed",
         workflow_id=request.workflow_id,
         trace_id=trace_id,
         session_id=session_id,

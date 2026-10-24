@@ -18,6 +18,8 @@ build/
 
 # Credentials - DO NOT COMMIT
 credentials.json
+firebase-credentials.json
+*-firebase-adminsdk-*.json
 linkedin_session*.json
 
 # IDE

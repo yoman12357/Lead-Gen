@@ -34,7 +34,9 @@ class FakeSearch:
 
 class NoNetworkScrapePipeline(VentoLeadPipeline):
     async def _scrape_candidate_website(self, website):
-        return {"emails": [], "phones": [], "socials": {"instagram": [], "tiktok": []}, "urls": [], "text": ""}
+        # Controlled official-site response, rather than treating a search
+        # snippet as a verified business website.
+        return {"emails": [], "phones": [], "socials": {"instagram": [], "tiktok": []}, "urls": [website], "text": "Pet store and pet supplies. Seattle, WA 98101", "verified": True}
 
 
 class ProfileNamePipeline(NoNetworkScrapePipeline):
@@ -94,7 +96,7 @@ def test_plan3_has_exact_four_categories_and_six_queries_each():
     for category in VALID_CATEGORIES:
         queries = build_discovery_queries(category, "Seattle, WA")
         assert len(queries) == 6
-        assert all("Seattle, WA" in query for query in queries)
+        assert all('Seattle' in query and 'WA' in query for query in queries)
 
 
 @pytest.mark.asyncio
@@ -113,7 +115,7 @@ async def test_two_pass_pipeline_returns_usable_business_leads_and_honors_old_cs
     assert result["shortfall"] == 0
     assert result["metrics"]["old_rows"] == 1
     assert result["metrics"]["duplicates_skipped"] >= 1
-    assert len(search.calls) == 18  # six discovery + twelve enrichment calls; old-history dedup follows enrichment
+    assert len(search.calls) == 6  # official sites enrich known businesses without twelve extra paid searches
     assert all(call["search_depth"] == "basic" for call in search.calls)
     assert all(lead["usable"] and not lead["rejected"] for lead in result["leads"])
     assert all(lead["business_name"] for lead in result["leads"])

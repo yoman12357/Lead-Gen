@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 from core.services.lead_quality_service import rank_and_enrich_leads
 from core.services.lead_quality_gate import apply_quality_gate
+from core.services.lead_search_policy import domain_key
 from core.services.todo_sheet_store import TodoSheetStore
 from core.services.vento.verification import parse_follower_count
 
@@ -23,7 +24,7 @@ class LeadService:
 
     @staticmethod
     def _domain_from_url(url: str) -> str:
-        return (urlparse(url or "").hostname or "").lower().strip()
+        return domain_key(url) if url else ""
 
     @staticmethod
     def _domain_from_email(email: str) -> str:

@@ -55,8 +55,8 @@ def build_plain_lead_summary(lead: Dict[str, Any]) -> str:
         or lead.get("plain_summary")
         or lead.get("what_they_do")
     )
-    if existing:
-        return _shorten(existing, 260)
+    # Rebuild generated summaries after contact/verification changes; stale text
+    # otherwise advertises contact paths that no longer exist.
 
     company = _clean(lead.get("company_name")) or "This company"
     specialty = _clean_specialty(lead.get("specialty") or lead.get("industry"))
@@ -77,7 +77,7 @@ def build_plain_lead_summary(lead: Dict[str, Any]) -> str:
 
     contact_signals = []
     if _has_usable(lead.get("contact_email") or lead.get("email")):
-        contact_signals.append("email")
+        contact_signals.append("published email (delivery unconfirmed)" if not lead.get("email_smtp_verified") else "verified email")
     if _has_usable(lead.get("contact_phone") or lead.get("phone")):
         contact_signals.append("phone")
     if _has_usable(lead.get("linkedin_url") or lead.get("company_linkedin_url")):

@@ -4,6 +4,8 @@ import re
 from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Tuple
 from urllib.parse import urlparse
+from core.services.lead_quality_service import score_lead
+from core.utils.phone_quality import normalize_phone_candidate, phone_region_for_location
 
 
 BLACKLISTED_DOMAIN_KEYWORDS = {
@@ -246,13 +248,16 @@ def normalize_and_score_lead(raw_lead: Dict[str, Any]) -> Dict[str, Any]:
         lead["contact_email"] = primary.get("validated_email") or lead.get("contact_email") or ""
         lead["contact_phone"] = primary.get("direct_phone") or lead.get("contact_phone") or ""
         lead["linkedin_url"] = primary.get("personal_linkedin") or lead.get("linkedin_url") or ""
-    elif _is_generic_email(_first_non_empty(lead.get("contact_email"), lead.get("email"))):
-        lead["contact_email"] = ""
-
-    lead["confidence"] = "high" if disposition == "Approved" else "medium" if disposition == "Needs_Review" else "low"
-    lead["quality_status"] = disposition
-    lead["acceptance_reason"] = _explain_disposition(lead)
-    lead["confidence_explanation"] = lead["acceptance_reason"]
+    # Preserve published company inboxes in the flat UI/export fields too.
+    quality = score_lead(lead)
+    lead.update(quality)
+    immediate = _immediate_rejection_reason(lead=lead, website=website, domain=domain)
+    if immediate:
+        lead.update(rejected=True, usable=False, quality_status="Rejected")
+        lead["acceptance_reason"] = f"Rejected by source policy: {immediate}. Quality score: {lead['quality_score']}/100."
+        lead["confidence_explanation"] = lead["acceptance_reason"]
+    lead["pipeline_disposition"] = "Rejected" if lead["rejected"] else "Approved" if lead["quality_status"] == "Strong" else "Needs_Review"
+    lead["rejection_reason_code"] = immediate or ("ERR_LOW_QUALITY" if lead["rejected"] else "NULL")
     return lead
 
 
@@ -291,7 +296,11 @@ def _build_contacts(lead: Dict[str, Any], *, domain: str) -> Tuple[List[Dict[str
     person_name = _first_non_empty(lead.get("contact_person_name"), lead.get("founder_name"), lead.get("person_name"))
     title = _first_non_empty(lead.get("contact_person_title"), lead.get("executive_title"), lead.get("designation"), lead.get("role"))
     linkedin = _first_non_empty(lead.get("personal_linkedin"), lead.get("linkedin_url"), lead.get("person_linkedin_url"))
-    phone = _normalize_phone(_first_non_empty(lead.get("direct_phone"), lead.get("contact_phone"), lead.get("phone")))
+    candidate = normalize_phone_candidate(
+        _first_non_empty(lead.get("direct_phone"), lead.get("contact_phone"), lead.get("phone")),
+        region=phone_region_for_location(str(lead.get("location") or "")),
+    )
+    phone = candidate.get("e164", "") if candidate else ""
 
     company_linkedin = _first_non_empty(lead.get("company_linkedin"), lead.get("company_linkedin_url"))
     alternative_contacts = {

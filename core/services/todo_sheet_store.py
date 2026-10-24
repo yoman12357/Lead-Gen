@@ -1,6 +1,5 @@
 import json
 import os
-import uuid
 import base64
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -36,23 +35,6 @@ class TodoSheetStore:
         "https://www.googleapis.com/auth/drive.metadata.readonly",
     ]
 
-    TASK_HEADERS = [
-        "task_id",
-        "title",
-        "description",
-        "category",
-        "project",
-        "status",
-        "priority",
-        "due_date",
-        "tags",
-        "notes",
-        "created_at",
-        "updated_at",
-        "completed_at",
-        "source_agent",
-        "trace_id",
-    ]
 
     # Dedicated leads worksheet columns (order matters)
     LEAD_HEADERS = [
@@ -90,19 +72,6 @@ class TodoSheetStore:
         "Duration Seconds", "Status", "Error Summary",
     ]
 
-    AUDIT_HEADERS = [
-        "event_id",
-        "timestamp",
-        "action",
-        "task_id",
-        "trace_id",
-        "session_id",
-        "payload_json",
-        "before_json",
-        "after_json",
-        "status",
-        "message",
-    ]
 
     def __init__(
         self,
@@ -110,17 +79,13 @@ class TodoSheetStore:
         sheet_id: Optional[str] = None,
         sheet_name: Optional[str] = None,
         folder_id: Optional[str] = None,
-        tasks_worksheet_name: Optional[str] = None,
-        audit_worksheet_name: Optional[str] = None,
     ):
         self.credentials_path = credentials_path or os.getenv("GOOGLE_CREDENTIALS_PATH")
         self.credentials_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
         self.credentials_json_b64 = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64")
         self.sheet_id = sheet_id or os.getenv("TODO_SHEET_ID")
-        self.sheet_name = sheet_name or os.getenv("TODO_SHEET_FILE_NAME", "Aurika Agent Todo")
+        self.sheet_name = sheet_name or os.getenv("TODO_SHEET_FILE_NAME", "Aryan Leads")
         self.folder_id = folder_id or os.getenv("GOOGLE_DRIVE_FOLDER_ID")
-        self.tasks_worksheet_name = tasks_worksheet_name or os.getenv("TODO_WORKSHEET_NAME", "tasks")
-        self.audit_worksheet_name = audit_worksheet_name or os.getenv("TODO_AUDIT_WORKSHEET", "audit_log")
         self.leads_worksheet_name = os.getenv("LEADS_WORKSHEET_NAME", "leads")
         self.vento_leads_worksheet_name = os.getenv("VENTO_LEADS_WORKSHEET_NAME", "Vento Influencers")
         self.vento_review_worksheet_name = os.getenv("VENTO_REVIEW_WORKSHEET_NAME", "Vento Review Queue")
@@ -130,14 +95,10 @@ class TodoSheetStore:
         self._gspread_client = None
         self._drive_service = None
         self._spreadsheet = None
-        self._tasks_ws = None
-        self._audit_ws = None
         self._leads_ws = None
         self._vento_leads_ws = None
         self._vento_review_ws = None
         self._vento_runs_ws = None
-        self._task_headers_current: List[str] = list(self.TASK_HEADERS)
-        self._audit_headers_current: List[str] = list(self.AUDIT_HEADERS)
         self._lead_headers_current: List[str] = list(self.LEAD_HEADERS)
         self._vento_lead_headers_current: List[str] = list(self.VENTO_LEAD_HEADERS)
         self._vento_review_headers_current: List[str] = list(self.VENTO_REVIEW_HEADERS)
@@ -300,232 +261,31 @@ class TodoSheetStore:
             self._spreadsheet = self._gspread_client.open_by_key(sheet_id)
         except Exception as exc:
             raise RuntimeError(
-                f"Unable to open todo spreadsheet '{sheet_id}'. Ensure it exists and service account has Editor access."
+                f"Unable to open lead spreadsheet '{sheet_id}'. Ensure it exists and service account has Editor access."
             ) from exc
 
-        self._tasks_ws = self._ensure_worksheet(self._spreadsheet, self.tasks_worksheet_name)
-        self._audit_ws = self._ensure_worksheet(self._spreadsheet, self.audit_worksheet_name)
         self._leads_ws = self._ensure_worksheet(self._spreadsheet, self.leads_worksheet_name)
 
-        self._task_headers_current = self._ensure_headers(self._tasks_ws, self.TASK_HEADERS)
-        self._audit_headers_current = self._ensure_headers(self._audit_ws, self.AUDIT_HEADERS)
         self._lead_headers_current = self._ensure_headers(self._leads_ws, self.LEAD_HEADERS)
 
         return {
             "spreadsheet_id": sheet_id,
             "spreadsheet_name": self._spreadsheet.title,
-            "tasks_worksheet": self.tasks_worksheet_name,
-            "audit_worksheet": self.audit_worksheet_name,
             "leads_worksheet": self.leads_worksheet_name,
-            "task_headers": self._task_headers_current,
+            "lead_headers": self._lead_headers_current,
         }
 
     def _require_ready(self):
-        if self._tasks_ws is None or self._audit_ws is None or self._leads_ws is None:
+        if self._leads_ws is None:
             self.ensure_store()
 
-    def _find_task_row(self, task_id: str) -> Tuple[int, Dict[str, Any]]:
-        self._require_ready()
-        rows = self._tasks_ws.get_all_values()
-        if not rows:
-            raise ValueError(f"Task not found: {task_id}")
 
-        headers = rows[0]
-        for idx, values in enumerate(rows[1:], start=2):
-            row_data = {headers[i]: values[i] if i < len(values) else "" for i in range(len(headers))}
-            if str(row_data.get("task_id", "")).strip() == str(task_id).strip():
-                return idx, row_data
-        raise ValueError(f"Task not found: {task_id}")
 
-    @staticmethod
-    def _normalize_tags(tags: Any) -> str:
-        if tags is None:
-            return ""
-        if isinstance(tags, str):
-            return tags
-        if isinstance(tags, list):
-            return ", ".join([str(item).strip() for item in tags if str(item).strip()])
-        return str(tags)
 
-    def _append_audit(
-        self,
-        action: str,
-        task_id: str,
-        trace_id: str = "",
-        session_id: str = "",
-        payload: Optional[Dict[str, Any]] = None,
-        before: Optional[Dict[str, Any]] = None,
-        after: Optional[Dict[str, Any]] = None,
-        status: str = "ok",
-        message: str = "",
-    ) -> None:
-        self._require_ready()
-        record = {
-            "event_id": f"EVT_{uuid.uuid4().hex[:10]}",
-            "timestamp": self._now(),
-            "action": action,
-            "task_id": task_id,
-            "trace_id": trace_id,
-            "session_id": session_id,
-            "payload_json": self._to_json(payload),
-            "before_json": self._to_json(before),
-            "after_json": self._to_json(after),
-            "status": status,
-            "message": message,
-        }
-        row = [record.get(h, "") for h in self._audit_headers_current]
-        self._audit_ws.append_row(row, value_input_option="USER_ENTERED")
 
-    def create_task(
-        self,
-        payload: Dict[str, Any],
-        trace_id: str = "",
-        session_id: str = "",
-        source_agent: str = "",
-    ) -> Dict[str, Any]:
-        self._require_ready()
-        now = self._now()
-        task = {
-            "task_id": payload.get("task_id") or f"TASK_{uuid.uuid4().hex[:10]}",
-            "title": str(payload.get("title", "")).strip(),
-            "description": str(payload.get("description", "")).strip(),
-            "category": str(payload.get("category", "")).strip(),
-            "project": str(payload.get("project", "")).strip(),
-            "status": str(payload.get("status", "pending")).strip() or "pending",
-            "priority": str(payload.get("priority", "medium")).strip() or "medium",
-            "due_date": str(payload.get("due_date", "")).strip(),
-            "tags": self._normalize_tags(payload.get("tags")),
-            "notes": str(payload.get("notes", "")).strip(),
-            "created_at": now,
-            "updated_at": now,
-            "completed_at": "",
-            "source_agent": source_agent,
-            "trace_id": trace_id,
-        }
-        if not task["title"]:
-            raise ValueError("title is required")
 
-        row = [task.get(h, "") for h in self._task_headers_current]
-        self._tasks_ws.append_row(row, value_input_option="USER_ENTERED")
-        self._append_audit(
-            action="create_task",
-            task_id=task["task_id"],
-            trace_id=trace_id,
-            session_id=session_id,
-            payload=payload,
-            after=task,
-            status="ok",
-            message="Task created",
-        )
-        return task
 
-    def list_tasks(self, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-        self._require_ready()
-        filters = filters or {}
-        records = self._tasks_ws.get_all_records(default_blank="")
-        status_filter = filters.get("status")
-        if not status_filter:
-            status_values = ["pending", "in_progress", "blocked"]
-        elif isinstance(status_filter, list):
-            status_values = [str(item).strip() for item in status_filter if str(item).strip()]
-        else:
-            status_values = [part.strip() for part in str(status_filter).split(",") if part.strip()]
 
-        category = str(filters.get("category", "")).strip().lower()
-        project = str(filters.get("project", "")).strip().lower()
-        search = str(filters.get("search", "")).strip().lower()
-        limit = int(filters.get("limit", 50))
-        include_done = bool(filters.get("include_done", False))
-
-        result: List[Dict[str, Any]] = []
-        for item in records:
-            row = {k: item.get(k, "") for k in self._task_headers_current}
-            status = str(row.get("status", "")).strip().lower()
-            if not include_done and status == "done":
-                continue
-            if status_values and status and status not in [x.lower() for x in status_values]:
-                continue
-            if category and category not in str(row.get("category", "")).lower():
-                continue
-            if project and project not in str(row.get("project", "")).lower():
-                continue
-            if search:
-                joined = " ".join(
-                    [
-                        str(row.get("title", "")),
-                        str(row.get("description", "")),
-                        str(row.get("tags", "")),
-                        str(row.get("notes", "")),
-                    ]
-                ).lower()
-                if search not in joined:
-                    continue
-            result.append(row)
-            if len(result) >= limit:
-                break
-        return result
-
-    def get_task(self, task_id: str) -> Dict[str, Any]:
-        _, task = self._find_task_row(task_id)
-        return task
-
-    def update_task(
-        self,
-        task_id: str,
-        updates: Dict[str, Any],
-        trace_id: str = "",
-        session_id: str = "",
-    ) -> Dict[str, Any]:
-        self._require_ready()
-        row_idx, before = self._find_task_row(task_id)
-        after = dict(before)
-        allowed_fields = set(self._task_headers_current) - {"task_id", "created_at"}
-        for key, value in (updates or {}).items():
-            if key not in allowed_fields:
-                continue
-            if key == "tags":
-                after[key] = self._normalize_tags(value)
-            else:
-                after[key] = str(value)
-        after["updated_at"] = self._now()
-        if str(after.get("status", "")).strip().lower() == "done" and not after.get("completed_at"):
-            after["completed_at"] = self._now()
-
-        row_values = [after.get(h, "") for h in self._task_headers_current]
-        end_col = gspread.utils.rowcol_to_a1(1, len(self._task_headers_current)).replace("1", "")
-        self._tasks_ws.update(f"A{row_idx}:{end_col}{row_idx}", [row_values], value_input_option="USER_ENTERED")
-        self._append_audit(
-            action="update_task",
-            task_id=task_id,
-            trace_id=trace_id,
-            session_id=session_id,
-            payload=updates,
-            before=before,
-            after=after,
-            status="ok",
-            message="Task updated",
-        )
-        return after
-
-    def complete_task(
-        self,
-        task_id: str,
-        completion_note: str = "",
-        trace_id: str = "",
-        session_id: str = "",
-    ) -> Dict[str, Any]:
-        updates = {
-            "status": "done",
-            "completed_at": self._now(),
-        }
-        if completion_note:
-            updates["notes"] = completion_note
-        return self.update_task(
-            task_id=task_id,
-            updates=updates,
-            trace_id=trace_id,
-            session_id=session_id,
-        )
 
     # ------------------------------------------------------------------
     # Lead-specific helpers

@@ -10,7 +10,6 @@ from core.adapters.router import build_adapter_from_env
 from config.schemas import ModelProfile, FilterConfig
 from core.agents.rag_agent import RAGAgent
 from core.extraction.json_extractor import JSONExtractor
-from core.extraction.image_metadata_extractor import ImageMetadataExtractor
 from core.services.file_analyzer import FileAnalyzer
 
 
@@ -67,14 +66,6 @@ class JSONExtractRequest(BaseModel):
     text: str
     schema_: str = Field(alias="schema")
     system_prompt: Optional[str] = None
-    model_profile: Optional[str] = None
-
-
-class ImageMetadataRequest(BaseModel):
-    text: str
-    topic: Optional[str] = None
-    level: Optional[str] = None
-    board: Optional[str] = None
     model_profile: Optional[str] = None
 
 
@@ -239,22 +230,6 @@ async def extract_json(request: JSONExtractRequest):
         text=request.text,
         schema_description=request.schema_,
         system_prompt=request.system_prompt,
-    )
-
-
-@router.post("/extract/image-metadata")
-async def extract_image_metadata(request: ImageMetadataRequest):
-    state = get_state()
-    profile = _get_model_profile(state, request.model_profile)
-    adapter = _get_adapter_for_profile(state, profile)
-    if not adapter:
-        raise HTTPException(status_code=500, detail="LLM adapter not initialized")
-    extractor = ImageMetadataExtractor(adapter)
-    return await extractor.extract(
-        text=request.text,
-        topic=request.topic,
-        level=request.level,
-        board=request.board,
     )
 
 

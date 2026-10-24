@@ -28,10 +28,6 @@ class FileAnalyzeTool(BaseTool):
         document = arguments["document"]
         mode = (arguments.get("mode") or "analyze").strip().lower()
 
-        if mode == "tutor":
-            text = await analyzer.analyze_for_tutoring(document=document, user_query=arguments.get("user_query", ""))
-            return {"text": text, "mode": mode}
-
         instruction = arguments.get("instruction") or "Extract key information from the document."
         response = await analyzer.analyze(
             document=document,

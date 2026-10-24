@@ -1,5 +1,5 @@
 """
-core.db — Firestore-backed persistence layer for Agentic Core.
+core.db — Firestore-backed persistence layer for Aryan Lead-Gen.
 
 All records are scoped under:
     businesses/{FIRESTORE_BUSINESS_ID}/

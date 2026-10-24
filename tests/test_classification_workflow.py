@@ -1,4 +1,5 @@
 import asyncio
+import yaml
 
 from config.loader import ConfigLoader
 from core.adapters.base import BaseLLMAdapter, LLMResponse
@@ -22,17 +23,8 @@ class FakeAdapter(BaseLLMAdapter):
         self.last_prompt = prompt
         self.last_system_prompt = system_prompt or ""
         return {
-            "needs_ticket": True,
-            "request_type": "post_sales_installation",
-            "product_family": "heater",
-            "customer_role": "end_customer",
-            "customer_stage": "installation",
-            "issue_area": "installation_help",
-            "error_code": None,
-            "priority": "medium",
-            "ticket_queue": "support_installation",
-            "ticket_title": "Heater installation help request",
-            "ticket_summary": "Customer needs help while installing the heater.",
+            "industry": "solar",
+            "priority": "high",
             "confidence": 0.93,
         }
 
@@ -48,26 +40,46 @@ class StubAgentFactory:
         self.tool_registry = ToolRegistry()
 
 
-def test_classification_workflow_uses_profile_dimensions():
+def test_classification_workflow_uses_profile_dimensions(tmp_path):
+    profiles = tmp_path / 'profiles'
+    workflows = tmp_path / 'workflows'
+    profiles.mkdir()
+    workflows.mkdir()
+    (profiles / 'lead_priority.yaml').write_text(yaml.safe_dump({
+        'profile_id': 'lead_priority',
+        'dimensions': [
+            {'name': 'industry', 'field_type': 'enum', 'allowed_values': ['solar', 'other'], 'required': True},
+            {'name': 'priority', 'field_type': 'enum', 'allowed_values': ['high', 'low'], 'required': True},
+            {'name': 'confidence', 'field_type': 'number', 'required': True},
+        ],
+    }), encoding='utf-8')
+    (workflows / 'lead_priority.yaml').write_text(yaml.safe_dump({
+        'workflow_id': 'lead_priority', 'start_at': 'classify_lead',
+        'nodes': [{
+            'node_id': 'classify_lead', 'node_type': 'classification',
+            'config': {'profile_id': 'lead_priority'},
+            'input_map': {'conversation_text': 'input.conversation_text', 'company_name': 'input.company_name'},
+            'output_map': {'outputs.classification': 'result'}, 'transitions': [],
+        }],
+    }), encoding='utf-8')
     adapter = FakeAdapter()
     engine = WorkflowEngine(
-        config_loader=ConfigLoader(),
+        config_loader=ConfigLoader(workflow_specs_dir=str(workflows), workflow_profiles_dir=str(profiles)),
         agent_factory=StubAgentFactory(adapter),
     )
 
     result = asyncio.run(
         engine.run(
-            workflow_id="email_auto_ticketing_v1",
+            workflow_id="lead_priority",
             payload={
-                "conversation_text": "I bought your heater and I am stuck during installation.",
-                "subject": "Need heater installation help",
-                "customer_email": "customer@example.com",
+                "conversation_text": "Solar installer requesting pricing for a commercial project.",
+                "company_name": "Example Solar",
             },
         )
     )
 
     classification = result["state"]["outputs"]["classification"]
-    assert classification["needs_ticket"] is True
-    assert classification["product_family"] == "heater"
-    assert "request_type" in adapter.last_system_prompt
-    assert "Need heater installation help" in adapter.last_prompt
+    assert classification["industry"] == "solar"
+    assert classification["priority"] == "high"
+    assert "industry" in adapter.last_system_prompt
+    assert "Example Solar" in adapter.last_prompt

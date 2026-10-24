@@ -16,18 +16,26 @@ def test_load_workflow_spec():
     assert spec.get_node("research_agent") is not None
 
 
-def test_load_todo_agent_and_workflow_spec():
+def test_lead_workflows_keep_all_referenced_agents_and_tools():
+    from core.tools.defaults import build_default_tool_registry
+
     loader = ConfigLoader()
-    agent_spec = loader.load_agent_spec("task_manager_agent")
-    workflow_spec = loader.load_workflow_spec("task_manager_pipeline")
-    assert agent_spec.agent_id == "task_manager_agent"
-    assert "todo_create" in agent_spec.allowed_tools
-    assert "aurika_tasks_create_task" in agent_spec.allowed_tools
-    assert workflow_spec.start_at == "ensure_todo_store"
+    registry = build_default_tool_registry()
+    for workflow_id in ("lead_generation_directory_pipeline", "lead_generation_split_pipeline", "velit_lead_generation_pipeline", "research_pipeline"):
+        workflow = loader.load_workflow_spec(workflow_id)
+        for node in workflow.nodes:
+            if node.node_type == "agent":
+                agent = loader.load_agent_spec(node.config['agent_id'])
+                for name in agent.allowed_tools:
+                    assert registry.get(name) is not None, f"{agent.agent_id} needs {name}"
+            elif node.node_type == "tool":
+                assert registry.get(node.config['tool_name']) is not None
 
 
-def test_load_classification_profile():
+def test_catalog_contains_lead_and_research_features_only():
     loader = ConfigLoader()
-    profile = loader.load_classification_profile("email_auto_ticketing_v1")
-    assert profile.profile_id == "email_auto_ticketing_v1"
-    assert profile.get_dimension("request_type") is not None
+    agents = {item['agent_id'] for item in loader.list_agent_specs()}
+    workflows = {item['workflow_id'] for item in loader.list_workflow_specs()}
+    assert {'lead_gen_agent', 'research_assistant', 'email_writer_agent'} <= agents
+    assert not agents.intersection({'campus_kernel_agent', 'customer_support_agent', 'task_manager_agent', 'script_writer_agent'})
+    assert not workflows.intersection({'campus_learning_agent', 'learning_tutor', 'task_manager_pipeline', 'email_auto_ticketing_v1'})

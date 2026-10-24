@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 
 class GeminiAdapter(BaseLLMAdapter):
-    DEFAULT_MODEL = "gemini-1.5-flash"
-    EMBEDDING_MODEL = "models/text-embedding-004"
+    DEFAULT_MODEL = "gemini-2.5-flash"
+    EMBEDDING_MODEL = "models/gemini-embedding-2"
 
     def __init__(
         self,

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <title>Aryan — prism A</title>
+  <defs>
+    <linearGradient id="tile" x1="12" y1="4" x2="114" y2="128" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#25366A"/><stop offset=".48" stop-color="#111C42"/><stop offset="1" stop-color="#080D22"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="16" y1="0" x2="100" y2="128" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A5CFFF" stop-opacity=".65"/><stop offset=".45" stop-color="#6475C9" stop-opacity=".18"/><stop offset="1" stop-color="#A78BFA" stop-opacity=".45"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="52" y1="29" x2="29" y2="98" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F0FDFF"/><stop offset=".35" stop-color="#8EF2FF"/><stop offset=".72" stop-color="#22C7ED"/><stop offset="1" stop-color="#1688C9"/>
+    </linearGradient>
+    <linearGradient id="violet" x1="64" y1="29" x2="104" y2="98" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D7D3FF"/><stop offset=".36" stop-color="#9E8CFF"/><stop offset=".72" stop-color="#7352EA"/><stop offset="1" stop-color="#4330A6"/>
+    </linearGradient>
+    <linearGradient id="bridge" x1="38" y1="72" x2="89" y2="86" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#43BFEA"/><stop offset=".45" stop-color="#D2FBFF"/><stop offset="1" stop-color="#AA9FFF"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0" cy="0" r="1" gradientTransform="translate(51 57) rotate(62) scale(67 53)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2573C7" stop-opacity=".35"/><stop offset="1" stop-color="#2573C7" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="1" y="1" width="126" height="126" rx="29" fill="url(#tile)" stroke="url(#rim)" stroke-width="2"/>
+  <rect x="3" y="3" width="122" height="122" rx="27" fill="url(#halo)"/>
+  <path d="M18 24C28 9 47 9 66 9" stroke="#D8EEFF" stroke-opacity=".15" stroke-width="2" stroke-linecap="round"/>
+  <path d="m24 99 30-69h21l29 69v5H85L64 53l-22 51H24v-5Z" fill="#050A1C" fill-opacity=".7"/>
+  <path d="m59 29 16 0 29 69H86L59 29Z" fill="url(#violet)"/>
+  <path d="m75 29 29 69-8-5-26-60 5-4Z" fill="#C2B5FF" fill-opacity=".28"/>
+  <path d="m24 98 30-69h17L42 98H24Z" fill="url(#cyan)"/>
+  <path d="m54 29 17 0-5 5H58L31 93l-7 5 30-69Z" fill="#E6FCFF" fill-opacity=".65"/>
+  <path d="m45 72 37 0 6 14H39l6-14Z" fill="url(#bridge)"/>
+  <path d="M45 72h37l2 4H43l2-4Z" fill="#EFFCFF" fill-opacity=".6"/>
+  <path d="M39 86h49l-2-4H41l-2 4Z" fill="#2258B1" fill-opacity=".45"/>
+  <path d="m58 34-25 59M76 35l23 57" stroke="#F0F9FF" stroke-opacity=".5" stroke-width=".8" stroke-linecap="round"/>
+  <path d="m91 24 1.5 4.5L97 30l-4.5 1.5L91 36l-1.5-4.5L85 30l4.5-1.5L91 24Z" fill="#B8F2FF"/>
+</svg>

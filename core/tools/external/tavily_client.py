@@ -1,6 +1,7 @@
 import os
 import logging
 import json
+import math
 from typing import Any, Dict, Optional
 
 import httpx
@@ -17,10 +18,11 @@ class TavilyClient:
     BASE_URL = "https://api.tavily.com"
     _research_unavailable = False
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, *, allow_missing_key: bool = False):
         self._logger = logging.getLogger("agent.runtime")
         self.api_key = api_key or os.getenv("TAVILY_API_KEY")
-        if not self.api_key:
+        self.usage_records = []
+        if not self.api_key and not allow_missing_key:
             raise ToolExecutionError("TAVILY_API_KEY is not configured", code="missing_api_key")
 
     @staticmethod
@@ -32,6 +34,37 @@ class TavilyClient:
         if len(text) > limit:
             return text[:limit] + "...[truncated]"
         return text
+
+    async def _post(self, endpoint, request_body, timeout):
+        # Record every attempt, including cancelled/failed requests whose billing
+        # cannot be inferred. Never keep request bodies (which contain secrets).
+        record = {"endpoint": endpoint, "status": "pending", "credits": None}
+        self.usage_records.append(record)
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(f"{self.BASE_URL}/{endpoint}", json=request_body)
+            record["http_status"] = response.status_code
+            record["status"] = "success" if response.is_success else "http_error"
+            try:
+                data = response.json()
+                credits = data.get("usage", {}).get("credits")
+                if type(credits) in (int, float) and math.isfinite(credits) and credits >= 0:
+                    record["credits"] = credits
+                record["request_id"] = data.get("request_id", "")
+            except (ValueError, AttributeError, TypeError):
+                pass
+            return response
+        except BaseException:
+            record["status"] = "interrupted_or_transport_error"
+            raise
+
+    def usage_report(self, start_index=0):
+        records = [dict(record) for record in self.usage_records[start_index:]]
+        return {"attempts": len(records), "reported_credits": sum(
+            record["credits"] for record in records if record["credits"] is not None),
+            "unreported_attempts": sum(record["credits"] is None for record in records),
+            "complete": all(record["credits"] is not None for record in records),
+            "records": records}
 
     @staticmethod
     def _response_error_detail(response: httpx.Response) -> Dict[str, Any]:
@@ -59,6 +92,7 @@ class TavilyClient:
         sanitized = dict(payload or {})
         sanitized["search_depth"] = DEFAULT_TAVILY_SEARCH_DEPTH
         sanitized["max_results"] = clamp_web_search_max_results(sanitized.get("max_results"))
+        sanitized["include_usage"] = True
         return sanitized
 
     @staticmethod
@@ -73,9 +107,12 @@ class TavilyClient:
             "urls": normalized_urls,
             "extract_depth": DEFAULT_TAVILY_EXTRACT_DEPTH,
             "include_images": bool(payload.get("include_images", False)),
+            "include_usage": True,
         }
 
     async def search(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        if not self.api_key:
+            raise ToolExecutionError("TAVILY_API_KEY is not configured", code="missing_api_key")
         sanitized_payload = self._sanitize_search_payload(payload)
         request_body = {"api_key": self.api_key, **sanitized_payload}
         self._logger.info(
@@ -93,33 +130,32 @@ class TavilyClient:
             },
         )
         try:
-            async with httpx.AsyncClient(timeout=35) as client:
-                response = await client.post(f"{self.BASE_URL}/search", json=request_body)
-                if response.status_code == 401:
-                    raise ToolExecutionError("TAVILY_API_KEY is invalid or expired. Get a new key at https://tavily.com", code="invalid_api_key")
-                response.raise_for_status()
-                data = response.json()
-                self._logger.info(
-                    "tavily_search_end",
-                    extra={
-                        "event": "tavily_search_end",
-                        "trace_id": "-",
-                        "session_id": "-",
-                        "agent_id": "-",
-                        "workflow_id": "-",
-                        "step": 0,
-                        "tool_name": "web_search",
-                        "status": f"status={response.status_code} results={len(data.get('results', []) or [])}",
-                        "payload": self._preview_payload(
-                            {
-                                "status_code": response.status_code,
-                                "result_count": len(data.get("results", []) or []),
-                                "provider": "tavily",
-                            }
-                        ),
-                    },
-                )
-                return data
+            response = await self._post("search", request_body, 35)
+            if response.status_code == 401:
+                raise ToolExecutionError("TAVILY_API_KEY is invalid or expired. Get a new key at https://tavily.com", code="invalid_api_key")
+            response.raise_for_status()
+            data = response.json()
+            self._logger.info(
+                "tavily_search_end",
+                extra={
+                    "event": "tavily_search_end",
+                    "trace_id": "-",
+                    "session_id": "-",
+                    "agent_id": "-",
+                    "workflow_id": "-",
+                    "step": 0,
+                    "tool_name": "web_search",
+                    "status": f"status={response.status_code} results={len(data.get('results', []) or [])}",
+                    "payload": self._preview_payload(
+                        {
+                            "status_code": response.status_code,
+                            "result_count": len(data.get("results", []) or []),
+                            "provider": "tavily",
+                        }
+                    ),
+                },
+            )
+            return data
         except ToolExecutionError:
             raise
         except httpx.HTTPStatusError as e:
@@ -156,7 +192,8 @@ class TavilyClient:
                     "payload": self._preview_payload({"error": str(e), "query": sanitized_payload.get("query", "")}),
                 },
             )
-            raise ToolExecutionError(f"Tavily search failed: {e}", code="tavily_error")
+            raise ToolExecutionError(f"Tavily search failed: {e}", code="tavily_error",
+                                     details={"retryable": isinstance(e, httpx.TransportError)})
 
     async def research(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         raise ToolExecutionError(
@@ -165,6 +202,8 @@ class TavilyClient:
         )
 
     async def extract(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        if not self.api_key:
+            raise ToolExecutionError("TAVILY_API_KEY is not configured", code="missing_api_key")
         sanitized_payload = self._sanitize_extract_payload(payload)
         if not sanitized_payload["urls"]:
             raise ToolExecutionError("urls is required for Tavily extract", code="invalid_arguments")
@@ -185,33 +224,32 @@ class TavilyClient:
             },
         )
         try:
-            async with httpx.AsyncClient(timeout=40) as client:
-                response = await client.post(f"{self.BASE_URL}/extract", json=request_body)
-                if response.status_code == 401:
-                    raise ToolExecutionError("TAVILY_API_KEY is invalid or expired", code="invalid_api_key")
-                response.raise_for_status()
-                data = response.json()
-                self._logger.info(
-                    "tavily_extract_end",
-                    extra={
-                        "event": "tavily_extract_end",
-                        "trace_id": "-",
-                        "session_id": "-",
-                        "agent_id": "-",
-                        "workflow_id": "-",
-                        "step": 0,
-                        "tool_name": "web_extract",
-                        "status": f"status={response.status_code}",
-                        "payload": self._preview_payload(
-                            {
-                                "status_code": response.status_code,
-                                "url_count": len(sanitized_payload["urls"]),
-                                "provider": "tavily",
-                            }
-                        ),
-                    },
-                )
-                return data
+            response = await self._post("extract", request_body, 40)
+            if response.status_code == 401:
+                raise ToolExecutionError("TAVILY_API_KEY is invalid or expired", code="invalid_api_key")
+            response.raise_for_status()
+            data = response.json()
+            self._logger.info(
+                "tavily_extract_end",
+                extra={
+                    "event": "tavily_extract_end",
+                    "trace_id": "-",
+                    "session_id": "-",
+                    "agent_id": "-",
+                    "workflow_id": "-",
+                    "step": 0,
+                    "tool_name": "web_extract",
+                    "status": f"status={response.status_code}",
+                    "payload": self._preview_payload(
+                        {
+                            "status_code": response.status_code,
+                            "url_count": len(sanitized_payload["urls"]),
+                            "provider": "tavily",
+                        }
+                    ),
+                },
+            )
+            return data
         except ToolExecutionError:
             raise
         except httpx.HTTPStatusError as exc:
@@ -248,5 +286,6 @@ class TavilyClient:
                     "payload": self._preview_payload({"error": str(exc), "urls": sanitized_payload["urls"]}),
                 },
             )
-            raise ToolExecutionError(f"Tavily extract failed: {exc}", code="tavily_error")
+            raise ToolExecutionError(f"Tavily extract failed: {exc}", code="tavily_error",
+                                     details={"retryable": isinstance(exc, httpx.TransportError)})
 

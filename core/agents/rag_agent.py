@@ -7,10 +7,10 @@ from core.retrieval.qdrant_client import QdrantRetriever
 
 class RAGAgent:
     DEFAULT_REWRITE_PROMPT = (
-        "You are rewriting a student question into a short search query for a vector database.\n"
+        "Rewrite the company or prospect research question into a short knowledge search query.\n"
         "Return only the search query, no quotes or extra text.\n\n"
         "Question: {query}\n"
-        "Context: subject={subject}, class={class_level}, board={board}\n"
+        "Context: industry={industry}, location={location}, company={company}\n"
     )
 
     DEFAULT_RESPONSE_PROMPT = (
@@ -94,9 +94,9 @@ class RAGAgent:
     async def _rewrite_query(self, query: str, context: Dict[str, Any]) -> str:
         prompt = self.DEFAULT_REWRITE_PROMPT.format(
             query=query,
-            subject=context.get("subject", "N/A"),
-            class_level=context.get("class", "N/A"),
-            board=context.get("board", "N/A"),
+            industry=context.get("industry", "N/A"),
+            location=context.get("location", "N/A"),
+            company=context.get("company_name", "N/A"),
         )
         try:
             response = await self.llm.generate(prompt=prompt, temperature=0.1, max_tokens=64)
@@ -112,7 +112,7 @@ class RAGAgent:
         for idx, item in enumerate(results, 1):
             content = item.get("content", "")
             meta = item.get("metadata", {}) or {}
-            topic = meta.get("topic_name", "") or meta.get("chapter_name", "")
+            topic = meta.get("company_name", "") or meta.get("title", "") or meta.get("source_file", "")
             lines.append(f"[{idx}] {topic}\n{content}")
         return "\n".join(lines)
 

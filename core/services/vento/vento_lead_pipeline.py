@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import socket
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
@@ -39,6 +40,8 @@ from core.services.vento.discovery import (
     normalized_domain,
 )
 from core.services.vento.verification import parse_follower_count
+from core.services.public_site_data import public_page, contact_links, contact_context, office_key
+from core.services.lead_search_policy import location_evidence, is_listing_source, is_editorial_source, industry_evidence, is_information_portal
 from core.tools.external.html_search_fallback import HTMLSearchFallbackClient
 from core.tools.external.tavily_client import TavilyClient
 
@@ -375,6 +378,8 @@ class VentoLeadPipeline:
         old_leads_csv: Optional[str] = None,
         old_leads_file: Optional[str] = None,
     ) -> Dict[str, Any]:
+        started = time.monotonic()
+        usage_start = len(getattr(self.tavily, 'usage_records', []))
         category = str(category or "").strip().lower()
         location = _WHITESPACE_RE.sub(" ", str(location or "")).strip()
         if category not in VALID_CATEGORIES:
@@ -389,6 +394,7 @@ class VentoLeadPipeline:
             raise ValueError("target_count must be between 1 and 200")
 
         self._stats = self._empty_stats()
+        self._target_location = location
         raw_candidates = await self._discover_candidates(category, location, target_count)
         enriched = await self._enrich_candidates(raw_candidates, category, location, target_count)
         try:
@@ -450,6 +456,9 @@ class VentoLeadPipeline:
             "target_count": target_count,
             "returned_count": len(final),
             "shortfall": max(0, target_count - len(final)),
+            "elapsed_seconds": round(time.monotonic() - started, 1),
+            "provider_usage": {"tavily": self.tavily.usage_report(start_index=usage_start) if isinstance(self.tavily, TavilyClient) else None,
+                               "gemini_calls": self._stats.get('gemini_calls', 0)},
             "metrics": {
                 "raw_discovered": len(raw_candidates),
                 "enriched": len(enriched),
@@ -589,6 +598,8 @@ class VentoLeadPipeline:
             title = str(item.get("title") or "").strip()
             content = str(item.get("content") or "").strip()
             combined = f"{title} {content} {url}"
+            if category != 'dog_parent_influencers' and (is_listing_source(url, combined) or is_editorial_source(url, combined)):
+                continue
             socials = extract_social_handles(combined, url)
             social_name = ""
             social_platform = "instagram" if socials["instagram"] else "tiktok" if socials["tiktok"] else ""
@@ -610,7 +621,7 @@ class VentoLeadPipeline:
                 continue
             seen.add(identity)
             websites = [] if is_social_or_directory_url(url) else [url]
-            evidence = f"{query} {combined}"
+            evidence = combined
             raw_emails = extract_emails(combined)
             creator_emails = (
                 self._creator_emails(raw_emails, combined, name=name, socials=socials)
@@ -629,6 +640,7 @@ class VentoLeadPipeline:
                 "source": "tavily_discovery",
                 "category": category,
                 "source_url": url,
+                "source_is_social_post": social_post,
                 "creator_name_source": name_source if category == "dog_parent_influencers" else "search_result_title",
                 "creator_name_confidence": (
                     "high" if name_source == "social_search_metadata"
@@ -668,6 +680,8 @@ class VentoLeadPipeline:
         target_count: int,
     ) -> List[Dict[str, Any]]:
         selected_limit = min(len(candidates), self.max_enrichment_candidates)
+        if category != 'dog_parent_influencers':
+            selected_limit = min(selected_limit, max(target_count * 3, target_count + 8))
         if category == "dog_parent_influencers":
             selected_limit = min(selected_limit, max(target_count * 2, target_count + 10))
         selected = list(candidates[:selected_limit])
@@ -791,7 +805,13 @@ class VentoLeadPipeline:
     ) -> Dict[str, Any]:
         lead = dict(candidate)
         query = build_enrichment_query(category, self._lead_name(lead), location)
-        data, provider = await self._search(query, max_results=VENTO_RESULTS_PER_ENRICHMENT_QUERY)
+        scraped = None
+        if category != 'dog_parent_influencers' and lead.get('website'):
+            scraped = await self._scrape_candidate_website(str(lead['website']))
+        if scraped and scraped.get('verified'):
+            data, provider = {'results': []}, 'official_website'
+        else:
+            data, provider = await self._search(query, max_results=VENTO_RESULTS_PER_ENRICHMENT_QUERY)
         results = [item for item in (data.get("results") or []) if isinstance(item, dict)]
         matched_results = self._identity_matched_results(lead, results)
         blocks = []
@@ -801,7 +821,9 @@ class VentoLeadPipeline:
             result_urls.append(item_url)
             blocks.append(f"{item.get('title') or ''} {item.get('content') or ''} {item_url}")
         combined = " ".join(blocks)
-        evidence = f"{lead.get('evidence') or ''} {query} {combined}"
+        lead['creator_profile_evidence'] = '\n'.join(str(item.get('content') or '') for item in matched_results
+            if re.search(r'instagram\.com|tiktok\.com', str(item.get('url') or '')) and not re.search(r'/(?:video|p|reel|reels|stories)/', str(item.get('url') or '')))
+        evidence = f"{lead.get('evidence') or ''} {combined}"
         emails = extract_emails(combined)
         phones = extract_phones(combined)
         socials = extract_social_handles(combined, *result_urls)
@@ -855,7 +877,16 @@ class VentoLeadPipeline:
                 break
 
         if lead.get("website"):
-            scraped = await self._scrape_candidate_website(str(lead["website"]))
+            scraped = scraped or await self._scrape_candidate_website(str(lead["website"]))
+            if category != 'dog_parent_influencers' and 'verified' in scraped:
+                lead['official_site_verified'] = scraped['verified']
+                lead['location_match'] = location_evidence(scraped['text'], location)['matched']
+                lead['industry_match'] = industry_evidence(scraped.get('activity_text', scraped['text']), _CATEGORY_NICHES[category])['matched']
+                lead['email'] = ''
+                lead['phone'] = ''
+                lead['contact_sources'] = scraped.get('contact_sources', [])
+                if scraped.get('company_name'):
+                    lead['business_name'] = scraped['company_name']
             # The candidate's own site is more authoritative than snippets. Its
             # contacts replace snippet contacts to prevent cross-business mixing.
             if scraped["emails"]:
@@ -873,6 +904,7 @@ class VentoLeadPipeline:
             lead["instagram_url"] = self._social_url(lead.get("instagram_handle"), "instagram")
             lead["tiktok_url"] = self._social_url(lead.get("tiktok_handle"), "tiktok")
             lead["scraped_urls"] = scraped["urls"]
+            lead['whatsapp_urls'] = scraped.get('whatsapp_urls', [])
             lead["evidence"] = f"{lead['evidence']} {scraped['text']}"[:20_000]
         if category == "dog_parent_influencers":
             await self._enrich_creator_name_from_social_profile(lead)
@@ -1112,10 +1144,8 @@ class VentoLeadPipeline:
 
     @staticmethod
     def _normalize_email(value: Any) -> str:
-        match = EMAIL_RE.search(str(value or "").lower())
-        if not match:
-            return ""
-        return match.group(0).strip(".,;:()[]{}").lower()
+        emails = extract_emails(str(value or ''))
+        return emails[0] if emails else ''
 
     @staticmethod
     def _email_domain(email: str) -> str:
@@ -1175,81 +1205,104 @@ class VentoLeadPipeline:
         return tokens
 
     async def _scrape_candidate_website(self, website: str) -> Dict[str, Any]:
-        empty = {"emails": [], "phones": [], "socials": {"instagram": [], "tiktok": []}, "urls": [], "text": ""}
+        from core.services.lead_search_engine import contact_material, company_identity
+        empty = {"emails": [], "phones": [], "socials": {"instagram": [], "tiktok": []}, "urls": [], "text": "", "verified": False}
         if not await self._safe_public_url(website):
             return empty
         headers = {"User-Agent": "Mozilla/5.0 (compatible; VentoLeadFinder/3.0; +https://comfortpod.com/)"}
         timeout = httpx.Timeout(self.scrape_timeout, connect=min(5.0, self.scrape_timeout))
-        texts: List[str] = []
+        pages: List[Dict[str, Any]] = []
         fetched_urls: List[str] = []
         try:
-            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, headers=headers) as client:
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=False, headers=headers) as client:
                 first = await self._fetch_html(client, website)
                 if first:
                     final_url, content = first
                     fetched_urls.append(final_url)
-                    texts.append(content)
-                    contact_urls = []
-                    for href in _CONTACT_LINK_RE.findall(content):
-                        target = urljoin(final_url, href)
-                        if normalized_domain(target, allow_generic=True) == normalized_domain(final_url, allow_generic=True):
-                            contact_urls.append(target)
+                    pages.append(public_page(content, final_url))
+                    contact_urls = contact_links(pages[0])
                     if not contact_urls:
                         contact_urls = [urljoin(final_url.rstrip("/") + "/", "contact")]
-                    for target in list(dict.fromkeys(contact_urls))[:1]:
-                        if target == final_url or not await self._safe_public_url(target):
-                            continue
-                        page = await self._fetch_html(client, target)
-                        if page:
+                    targets = [target for target in dict.fromkeys(contact_urls) if target != final_url][:3]
+                    secondary = await asyncio.gather(*(self._fetch_html(client, target) for target in targets))
+                    for page in secondary:
+                        if page and normalized_domain(page[0], allow_generic=True) == normalized_domain(final_url, allow_generic=True):
                             fetched_urls.append(page[0])
-                            texts.append(page[1])
+                            pages.append(public_page(page[1], page[0]))
         except Exception as exc:
             self._stats["scrape_failures"] += 1
             self.logger.info("vento_site_scrape_failed", extra={"website": website, "error": str(exc)})
-        combined = " ".join(texts)
-        visible = _WHITESPACE_RE.sub(" ", _HTML_TAG_RE.sub(" ", _SCRIPT_STYLE_RE.sub(" ", combined)))
-        mailto_emails = extract_emails(" ".join(_MAILTO_RE.findall(combined)))
-        visible_emails = extract_emails(visible)
-        tel_phones = extract_phones(" ".join(_TEL_RE.findall(combined)))
-        json_phones = extract_phones(" ".join(_JSON_PHONE_RE.findall(combined)))
-        visible_phones = extract_phones(visible)
+        pages = [page for page in pages if not is_listing_source(page['url'], page['text']) and not is_editorial_source(page['url'], page['text']) and not is_information_portal(page['url'], page['text'])]
+        contacts = []
+        for page in pages:
+            decoded, phone_text = contact_material(page)
+            for value in extract_emails(decoded):
+                domain = value.split('@')[-1].casefold()
+                if domain == normalized_domain(page['url'], allow_generic=True) or domain in _PERSONAL_EMAIL_DOMAINS:
+                    context = contact_context(page, value)
+                    contacts.append({'email': value, 'source_url': page['url'], 'office_key': office_key(context),
+                                     'requested_office_match': location_evidence(context, getattr(self, '_target_location', ''))['matched']})
+            for value in extract_phones(phone_text):
+                context = contact_context(page, value)
+                contacts.append({'phone': value, 'source_url': page['url'], 'office_key': office_key(context),
+                                 'requested_office_match': location_evidence(context, getattr(self, '_target_location', ''))['matched']})
+        contacts.sort(key=lambda item: not item.get('requested_office_match'))
+        combined = '\n'.join(page['text'] for page in pages)
         return {
-            "emails": list(dict.fromkeys(mailto_emails + visible_emails)),
-            "phones": list(dict.fromkeys(tel_phones + json_phones + visible_phones)),
-            "socials": extract_social_handles(combined),
+            "emails": list(dict.fromkeys(item['email'] for item in contacts if item.get('email'))),
+            "phones": list(dict.fromkeys(item['phone'] for item in contacts if item.get('phone'))),
+            "socials": extract_social_handles(' '.join(url for page in pages for url in page['social_urls'])),
             "urls": fetched_urls,
             "text": combined[:10_000],
+            "activity_text": '\n'.join(page['activity_text'] for page in pages)[:10_000],
+            "verified": bool(pages),
+            "company_name": company_identity(pages, normalized_domain(website, allow_generic=True)) if pages else '',
+            "contact_sources": contacts,
+            "whatsapp_urls": list(dict.fromkeys(url for page in pages for url in page['whatsapp_urls'])),
         }
 
     async def _fetch_html(self, client: httpx.AsyncClient, url: str) -> Optional[Tuple[str, str]]:
-        self._stats["scrape_requests"] += 1
-        try:
-            response = await client.get(url)
-            response.raise_for_status()
-            if not await self._safe_public_url(str(response.url)):
+        for _ in range(4):
+            if not await self._safe_public_url(url):
                 return None
-            content_type = response.headers.get("content-type", "").lower()
-            if content_type and not any(item in content_type for item in ("html", "text", "xhtml")):
-                return None
-            return str(response.url), response.text[:1_000_000]
-        except Exception:
-            self._stats["scrape_failures"] += 1
-            return None
+            for attempt in range(2):
+                self._stats['scrape_requests'] += 1
+                try:
+                    response = await client.get(url, follow_redirects=False)
+                    if response.is_redirect:
+                        url = urljoin(url, response.headers.get('location', ''))
+                        break
+                    response.raise_for_status()
+                    content_type = response.headers.get('content-type', '').lower()
+                    if content_type and not any(item in content_type for item in ('html', 'text', 'xhtml')):
+                        return None
+                    return str(response.url), response.text[:1_000_000]
+                except (httpx.HTTPError, ValueError) as exc:
+                    from core.services.lead_search_engine import LeadSearchEngine
+                    if attempt or not LeadSearchEngine.retryable(exc):
+                        self._stats['scrape_failures'] += 1
+                        return None
+                    await asyncio.sleep(.25)
+        return None
 
     async def _safe_public_url(self, url: str) -> bool:
         parsed = urlparse(str(url or "").strip())
-        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
             return False
         host = parsed.hostname.lower()
         if host in {"localhost", "localhost.localdomain"} or host.endswith(".local"):
             return False
         try:
-            addresses = await asyncio.to_thread(socket.getaddrinfo, host, parsed.port or (443 if parsed.scheme == "https" else 80))
+            if parsed.port not in {None, 80, 443}:
+                return False
+            addresses = await asyncio.wait_for(asyncio.to_thread(socket.getaddrinfo, host, parsed.port or (443 if parsed.scheme == "https" else 80)), 3)
+            if not addresses:
+                return False
             for address in addresses:
                 ip = ipaddress.ip_address(address[4][0])
                 if not ip.is_global:
                     return False
-        except (OSError, ValueError):
+        except (OSError, ValueError, TimeoutError):
             return False
         return True
 
@@ -1340,6 +1393,8 @@ class VentoLeadPipeline:
         rejected: List[Dict[str, Any]] = []
         for raw in leads:
             lead = dict(raw)
+            if lead.get('email'):
+                lead['email'] = self._normalize_email(lead['email'])
             reason = ""
             if not self._lead_name(lead):
                 reason = "missing_name"
@@ -1349,10 +1404,24 @@ class VentoLeadPipeline:
                 reason = "missing_contact"
             elif self._clearly_not_pet_related(lead):
                 reason = "not_pet_related"
+            elif category != 'dog_parent_influencers' and (lead.get('official_site_verified') is False or (getattr(self, '_target_location', '') and lead.get('official_site_verified') is not True)):
+                reason = 'official_site_unavailable'
+            elif category != 'dog_parent_influencers' and lead.get('location_match') is False:
+                reason = 'location_unconfirmed'
+            elif category != 'dog_parent_influencers' and lead.get('industry_match') is False:
+                reason = 'industry_mismatch'
             elif category == "dog_parent_influencers":
-                passes_followers, follower_reason = self._meets_min_social_followers(lead)
-                if not passes_followers:
-                    reason = follower_reason
+                if getattr(self, '_target_location', ''):
+                    local, pet = self._creator_fit(lead, self._target_location)
+                    lead.update(creator_location_confirmed=local, creator_niche_confirmed=pet)
+                    if not pet:
+                        reason = 'creator_niche_unconfirmed'
+                    elif not local:
+                        reason = 'creator_location_unconfirmed'
+                if not reason:
+                    passes_followers, follower_reason = self._meets_min_social_followers(lead)
+                    if not passes_followers:
+                        reason = follower_reason
             if reason:
                 lead["usable"] = False
                 lead["rejected"] = True
@@ -1564,9 +1633,22 @@ class VentoLeadPipeline:
 
     @classmethod
     def _location_matches(cls, evidence: str, location: str) -> bool:
-        evidence_lower = str(evidence or "").lower()
-        parts = [part.strip().lower() for part in re.split(r"[,/]", location) if len(part.strip()) >= 2]
-        return bool(parts) and any(part in evidence_lower for part in parts)
+        city = re.split(r'[,/]', location)[0].strip()
+        return bool(city and re.search(r'\b' + re.escape(city) + r'\b', str(evidence or ''), re.I))
+
+    @staticmethod
+    def _creator_fit(lead: Dict[str, Any], location: str) -> Tuple[bool, bool]:
+        biography = str(lead.get('apify_bio') or '')
+        evidence = biography + '\n' + (str(lead.get('creator_profile_evidence') or '') if lead.get('source_is_social_post') else str(lead.get('evidence') or ''))
+        pet = bool(re.search(r'\b(?:dog|pet|puppy|cat)[\s_-]*(?:mom|mum|dad|parent|lover|creator|influencer|account|content|trainer)|\b(?:dog|pet)\s+(?:lifestyle|life|training)|\bdogsofinstagram\b', evidence, re.I))
+        city = location.split(',')[0].strip()
+        local = False
+        for match in re.finditer(r'\b' + re.escape(city) + r'\b', evidence, re.I):
+            window = evidence[max(0, match.start()-100):match.end()+100]
+            if not re.search(r'visiting|vacation|tickets|comedy|concert|stand.up|on tour|show in|travel(?:ling|ing)? to', window, re.I):
+                local = True
+                break
+        return local, pet
 
     @classmethod
     def _contact_count(cls, lead: Dict[str, Any], category: str) -> int:

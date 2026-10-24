@@ -20,8 +20,8 @@ class RemoteToolWrapper(BaseTool):
     And returns:
         { "result": { ...any dict... } }
 
-    This allows tools that live in a different project (e.g. Aurika OS)
-    to be called by any agent in Agentic Core just like a local tool.
+    This allows tools that live in a different project (e.g. your CRM)
+    to be called by any agent in Aryan Lead-Gen just like a local tool.
     """
 
     def __init__(

@@ -5,25 +5,25 @@ as if they were local tools.
 Each YAML file in config/remote_tools/ defines one remote tool:
 
     tool_name: create_product
-    description: Creates a new product in Aurika OS
+    description: Creates a prospect in your CRM
 
     # Option A — full URL hardcoded (with optional env override):
-    endpoint_url: https://aurika-os.com/tools/create_product
-    endpoint_url_env: AURIKA_FULL_URL_ENV   # replaces endpoint_url entirely when set
+    endpoint_url: https://crm.example.com/api/prospects
+    endpoint_url_env: CRM_FULL_URL_ENV      # replaces endpoint_url entirely when set
 
     # Option B — base URL from env + path from YAML (recommended):
-    base_url_env: AURIKA_OS_BASE_API_URL    # e.g. http://localhost:3000
-    endpoint_url: /api/internal/tasks       # path appended to the base URL
+    base_url_env: CRM_BASE_API_URL          # e.g. http://localhost:3000
+    endpoint_url: /api/prospects            # path appended to the base URL
 
     auth_header_name: X-Internal-Key     # optional
-    auth_header_env: AURIKA_OS_API_KEY   # env var that holds the raw token (no "Bearer " prefix)
+    auth_header_env: CRM_API_KEY         # env var that holds the raw token (no "Bearer " prefix)
     auth_header_prefix: "Bearer "        # optional prefix prepended to the token
     timeout_seconds: 30
     request_body_mode: wrapped           # or raw_arguments
     static_headers:
-      X-Aurika-Project: aurika_os
+      X-Project: aryan_lead_gen
     argument_headers:
-      x-aurika-tenant-id: tenant_id
+      x-tenant-id: tenant_id
     omit_arguments_from_body:
       - tenant_id
     input_schema:

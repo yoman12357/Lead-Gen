@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Agentic Core — B2B Lead Generator</title>
+  <title>Aryan — B2B Lead Generator</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/aryan-icon.svg" />
   <meta name="description" content="AI-powered B2B lead generation. Search the web, scrape companies, and view structured results instantly." />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -332,6 +333,7 @@
       color: #ffffff !important;
     }
   </style>
+  <link rel="stylesheet" href="/assets/workspace.css" />
 </head>
 <body>
 
@@ -344,7 +346,7 @@
         </svg>
       </div>
       <div>
-        <h1 class="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-lv-100 to-lv-400">Agentic Core</h1>
+        <h1 class="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-lv-100 to-lv-400">Aryan</h1>
         <p class="text-[10px] text-lv-400/60 uppercase tracking-[.18em] font-semibold">B2B Lead Intelligence</p>
       </div>
     </div>
@@ -407,6 +409,14 @@
                 <span id="vento-file-name" class="text-[10px] text-lv-500 truncate">No file selected</span>
               </div>
               <p class="text-[9px] text-lv-500 mt-1">Old leads are used for deduplication. Export keeps old rows in order and appends new leads.</p>
+            </div>
+            <div>
+              <label for="vento-runtime-input" class="text-[10px] text-emerald-300/80 mb-1.5 block font-bold uppercase tracking-wider">Batch runtime budget</label>
+              <div class="flex items-center gap-3">
+                <input id="vento-runtime-input" type="number" min="60" max="1800" step="60" value="1800" class="field" />
+                <span class="text-[10px] text-lv-500 whitespace-nowrap">seconds</span>
+              </div>
+              <p class="text-[9px] text-lv-500 mt-1">Used for fresh Vento batch runs. The backend maximum remains 1,800 seconds.</p>
             </div>
             <div id="vento-batch-summary" class="hidden grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
               <div class="rounded-xl bg-lv-950/30 p-2"><div class="text-[9px] text-lv-500 uppercase">Raw</div><div id="vento-metric-raw" class="font-bold">0</div></div>
@@ -804,6 +814,7 @@
     const ventoCategory = document.getElementById('vento-category');
     const ventoFileInput = document.getElementById('vento-file-input');
     const ventoFileName = document.getElementById('vento-file-name');
+    const ventoRuntimeInput = document.getElementById('vento-runtime-input');
     const ventoBatchSummary = document.getElementById('vento-batch-summary');
     const exportXlsxBtn = document.getElementById('export-xlsx-btn');
     const contactExportBtn = document.getElementById('contact-export-btn');
@@ -1150,24 +1161,36 @@
     }
     function stopTimer() { clearInterval(state.timerInterval); }
 
-    // ── Progress animation ────────────────────────────────────────────────────
-    let progressStep = 0;
-    const progressSteps = [10, 25, 42, 60, 75, 88];
-    let progressInterval;
+    // Honest coarse-grained activity indicator. The backend returns completed
+    // workflow state rather than streaming percentage events, so this remains
+    // indeterminate while the request is in flight.
+    let pipelineOutcome = 'idle';
     function startProgress() {
-      progressStep = 0;
+      pipelineOutcome = 'running';
       progressWrap.classList.remove('hidden');
-      progressBar.style.width = '5%';
-      progressInterval = setInterval(() => {
-        if (progressStep < progressSteps.length) {
-          progressBar.style.width = progressSteps[progressStep++] + '%';
-        }
-      }, 12000 / progressSteps.length);
+      progressBar.style.width = '100%';
+      progressBar.classList.add('is-indeterminate');
+      progressWrap.setAttribute('aria-label', 'Lead generation request is running');
+      window.AryanUI?.setPipelineState('running');
     }
     function finishProgress() {
-      clearInterval(progressInterval);
-      progressBar.style.width = '100%';
+      progressBar.classList.remove('is-indeterminate');
+      progressBar.style.width = pipelineOutcome === 'failed' ? '0%' : '100%';
+      if (pipelineOutcome !== 'failed') {
+        pipelineOutcome = 'complete';
+        const detail = state.leads.length
+          ? 'Pipeline response received — results are ready to review'
+          : 'Pipeline response received — no leads were returned';
+        progressWrap.setAttribute('aria-label', detail);
+        window.AryanUI?.setPipelineState('complete', detail);
+      }
       setTimeout(() => progressWrap.classList.add('hidden'), 800);
+    }
+
+    function markPipelineFailed(message, stageIndex = 1) {
+      pipelineOutcome = 'failed';
+      progressWrap.setAttribute('aria-label', message || 'Lead generation request failed');
+      window.AryanUI?.setPipelineState('failed', { stageIndex, message });
     }
 
     // ── Table rendering ───────────────────────────────────────────────────────
@@ -2103,6 +2126,7 @@
       const location = locationInput.value.trim();
       const locations = parseVentoAreas(location);
       const targetCount = Math.max(1, Math.min(200, Number(leadCountInput.value || 20)));
+      const maxRuntimeSeconds = Math.max(60, Math.min(1800, Number(ventoRuntimeInput.value || 1800)));
       const file = ventoFileInput.files?.[0] || null;
       const emptyStateMessage = document.getElementById('empty-state-message');
       if (!locations.length) {
@@ -2122,7 +2146,7 @@
       startTimer();
       startProgress();
       if (locations.length > 1) {
-        addLog(`Starting Vento automation for <strong>${locations.length}</strong> areas: target <strong>${targetCount}</strong> leads each, 30-minute runtime budget.`, 'info');
+        addLog(`Starting Vento automation for <strong>${locations.length}</strong> areas: target <strong>${targetCount}</strong> leads each, ${Math.round(maxRuntimeSeconds / 60)}-minute runtime budget.`, 'info');
       } else {
         addLog(`Starting Vento two-pass search for <strong>${escapeHtml(locations[0])}</strong>: target <strong>${targetCount}</strong> usable leads.`, 'info');
       }
@@ -2149,7 +2173,7 @@
               category: ventoCategory.value,
               locations,
               target_per_location: targetCount,
-              max_runtime_seconds: 1800,
+              max_runtime_seconds: maxRuntimeSeconds,
             }),
           });
         }
@@ -2169,6 +2193,7 @@
         updateVentoBatchSummary({ ...(data.metrics || {}), shortfall: data.shortfall || 0 });
         renderTable();
         addLog(`Vento completed with <strong>${state.leads.length}</strong> usable leads. Tavily calls: <strong>${data.metrics?.tavily_calls || 0}</strong>; crawler fallback calls: <strong>${data.metrics?.fallback_search_calls || 0}</strong>.`, state.leads.length ? 'success' : 'info');
+        if (data.provider_usage) addLog(`Tavily reported credits: <strong>${data.provider_usage.tavily_reported_credits ?? data.provider_usage.tavily?.reported_credits ?? 0}</strong>${data.provider_usage.complete === false || data.provider_usage.tavily?.complete === false ? ' (incomplete provider reporting)' : ''}.`, 'info');
         if (Number(data.metrics?.tavily_quota_errors || 0) > 0) addLog('Tavily search is over its plan usage limit, so Vento cannot discover new candidates right now. Update/upgrade the Tavily key, then rerun.', 'error');
         else if (Number(data.metrics?.search_failures || 0) > 0) addLog(`Search provider issues detected: <strong>${data.metrics.search_failures}</strong> failed search request(s).`, 'error');
         if (data.output_file_path) addLog(`Final Vento Excel saved on Desktop: <strong>${escapeHtml(data.output_file_path)}</strong>.`, 'success');
@@ -2178,6 +2203,7 @@
         else if (data.storage_status === 'not_configured') addLog('Google Sheets is not configured yet. Leads remain available on this page and can still be exported to XLSX or JSON.', 'info');
       } catch (error) {
         const message = summarizeApiIssue(error.message);
+        markPipelineFailed(message);
         if (emptyStateMessage) emptyStateMessage.textContent = message;
         addLog(`Vento generation failed: ${escapeHtml(message)}`, 'error');
       } finally {
@@ -2812,6 +2838,8 @@
         }
 
         if (pipelineFailure && pipelineFailure.reason) {
+          pipelineOutcome = 'failed';
+          window.AryanUI?.setPipelineFromSteps(workflowSteps, pipelineFailure);
           leadgenDebug.warn('runLeadGen:pipeline_fail_fast', pipelineFailure);
           addLog(
             `Pipeline stopped early at <strong>${escapeHtml(String(pipelineFailure.stage || 'unknown_stage'))}</strong>: ${escapeHtml(String(pipelineFailure.reason))}`,
@@ -2882,6 +2910,7 @@
         await autoSaveToSheets(state.leads);
       } catch (err) {
         const friendly = summarizeApiIssue(err.message);
+        markPipelineFailed(friendly);
         leadgenDebug.error('runLeadGen:exception', { mode: state.mode, industry, location, targetLeadCount, targetRole, message: err.message, friendly, error: String(err) });
         if (emptyStateMessage) {
           emptyStateMessage.textContent = friendly;
@@ -2904,23 +2933,28 @@
     }
 
     function normalizeLead(raw) {
-      const lead = {};
+      const lead = { ...raw };
       const keys = Object.keys(raw || {});
       const find = (keywords) => {
+        for (const keyword of keywords) {
+          const exact = keys.find(k => k.toLowerCase().replace(/_/g, ' ') === keyword.replace(/_/g, ' '));
+          if (exact !== undefined) return raw[exact];
+        }
         const key = keys.find(k => keywords.some(kw => k.toLowerCase().replace(/_/g, ' ').includes(kw)));
         return key ? raw[key] : null;
       };
 
-      lead.company_name = find(['company name', 'company', 'name', 'business']) || '—';
-      lead.company_website = find(['website', 'url', 'domain', 'link']);
+      lead.company_name = raw.company_name ?? find(['company name', 'company', 'name', 'business']) ?? '—';
+      lead.company_website = raw.company_website ?? find(['website', 'url', 'domain', 'link']);
       if (isGenericCompanyName(lead.company_name)) {
         lead.company_name = companyNameFromUrl(lead.company_website) || lead.company_name;
       }
       lead.company_size = find(['size', 'employees', 'headcount']);
-      lead.contact_person_name = find(['contact person', 'contact name', 'person name', 'lead name', 'founder', 'ceo', 'owner']) || '';
+      lead.contact_person_name = raw.contact_person_name ?? find(['contact person', 'contact name', 'person name', 'lead name', 'founder', 'ceo', 'owner']) ?? '';
       lead.contact_person_title = find(['person title', 'contact title', 'job title', 'role', 'designation']) || '';
       lead.founder_name = lead.contact_person_name || find(['founder', 'ceo', 'owner']) || '—';
-      lead.linkedin_url = find(['linkedin', 'profile']);
+      lead.linkedin_url = raw.linkedin_url ?? find(['personal linkedin', 'person linkedin', 'linkedin', 'profile']);
+      if (String(lead.linkedin_url || '').includes('/company/')) lead.linkedin_url = '';
       lead.company_linkedin_url = find(['company linkedin']) || '';
       if (!lead.company_linkedin_url && Array.isArray(raw.source_details || raw.sourceDetails)) {
         const companyLinkedinSource = (raw.source_details || raw.sourceDetails).find(item => String(item?.url || '').includes('linkedin.com/company/'));
@@ -2928,9 +2962,9 @@
           lead.company_linkedin_url = companyLinkedinSource.url;
         }
       }
-      lead.contact_email = find(['email', 'mail']) || '—';
+      lead.contact_email = raw.contact_email ?? find(['email', 'mail']) ?? '—';
       if (isPlaceholderEmail(lead.contact_email)) lead.contact_email = '—';
-      lead.contact_phone = find(['phone', 'mobile', 'tel']) || '—';
+      lead.contact_phone = raw.contact_phone ?? find(['phone', 'mobile', 'tel']) ?? '—';
       const alternatePhonesValue = find(['alternate phones', 'alternate_phones', 'other phones']);
       lead.alternate_phones = Array.isArray(alternatePhonesValue)
         ? alternatePhonesValue
@@ -2978,10 +3012,14 @@
       const rawLocation = find(['location', 'address']) || '';
       const rawAddress = find(['address', 'street address', 'business address']) || '';
 
-      Object.assign(lead, parseLeadLocationParts(rawCity, rawState, rawZip, rawLocation, rawAddress));
+      if (Object.prototype.hasOwnProperty.call(raw, 'location_match')) {
+        Object.assign(lead, { city: raw.city || '', state: raw.state || '', zip_code: raw.zip_code || '', location: raw.location || '' });
+      } else {
+        Object.assign(lead, parseLeadLocationParts(rawCity, rawState, rawZip, rawLocation, rawAddress));
+      }
 
       lead.location = lead.location || [lead.city, lead.state, lead.zip_code].filter(Boolean).join(', ') || '—';
-      lead.status = find(['status']) || 'New';
+      lead.status = raw.status || 'New';
       lead.notes = find(['notes', 'comments', 'remarks']) || lead.lead_summary || lead.value_proposition || '';
       lead.address = rawAddress;
       lead.tags = find(['tags', 'tag']) || '';
@@ -3201,7 +3239,7 @@
 
     function buildCrmExportColumns(leads) {
       const columns = [
-        { header: 'Name (Required)', value: l => firstExportValue(l.contact_person_name, l.founder_name, l.company_name), keys: ['contact_person_name', 'founder_name'] },
+        { header: 'Contact Person', value: l => firstExportValue(l.contact_person_name, l.founder_name), keys: ['contact_person_name', 'founder_name'] },
         { header: 'Email (Required)', value: l => firstExportValue(isPlaceholderEmail(l.contact_email) ? '' : l.contact_email), keys: ['contact_email'] },
         { header: 'Company Name', value: l => firstExportValue(l.company_name), keys: ['company_name'] },
         { header: 'Designation', value: l => firstExportValue(l.contact_person_title, l.designation, l.role), keys: ['contact_person_title', 'designation', 'role'] },
@@ -3225,7 +3263,7 @@
         { header: 'Zip Code', value: l => firstExportValue(l.zip_code), keys: ['zip_code'] },
         { header: 'Status', value: l => firstExportValue(l.status || 'New'), keys: ['status'] },
       ];
-      const usedKeys = new Set(['email_verification', 'verification_checks', 'field_sources', 'source_details']);
+      const usedKeys = new Set(['email_verification', 'verification_checks', 'field_sources', 'source_details', 'verifying']);
       columns.forEach(column => (column.keys || []).forEach(key => usedKeys.add(key)));
       const usedHeaders = new Set(columns.map(column => column.header.toLowerCase()));
       const dynamicKeys = [];
@@ -3343,6 +3381,7 @@
 
         const verifiedLeads = Array.isArray(data.leads) ? data.leads : [];
         verifiedLeads.forEach((verifiedLead, index) => {
+          verifiedLead.verifying = false;
           if (leads[index]) Object.assign(leads[index], verifiedLead, { verifying: false });
         });
 
@@ -3695,5 +3734,8 @@
     checkCookieStatus();
   </script>
 
+  <script src="/assets/workspace.js"></script>
+  <link rel="stylesheet" href="/assets/lead-search.css">
+  <script src="/assets/lead-search.js"></script>
 </body>
 </html>

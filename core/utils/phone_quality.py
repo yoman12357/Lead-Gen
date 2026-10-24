@@ -82,7 +82,7 @@ def _clean_raw_phone(value: Any) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def _looks_bad_before_parse(raw: str, context: str = "") -> bool:
+def _looks_bad_before_parse(raw: str, context: str = "", region: str = "US") -> bool:
     cleaned = _clean_raw_phone(raw)
     base_text = re.split(r"\b(?:x|ext\.?|extension)\b", cleaned, maxsplit=1, flags=re.IGNORECASE)[0]
     digits = _digits(base_text)
@@ -99,7 +99,8 @@ def _looks_bad_before_parse(raw: str, context: str = "") -> bool:
     if digits[-10:] in {"1234567890", "0123456789", "9876543210"}:
         return True
     national_digits = digits[1:] if len(digits) == 11 and digits.startswith("1") else digits[-10:]
-    if len(national_digits) == 10:
+    is_nanp = (cleaned.startswith("+1") or (not cleaned.startswith("+") and region in {"US", "CA"}))
+    if len(national_digits) == 10 and is_nanp:
         area_code = national_digits[:3]
         exchange = national_digits[3:6]
         if area_code in INVALID_NANP_AREA_CODES or area_code[0] in {"0", "1"}:
@@ -114,9 +115,10 @@ def _looks_bad_before_parse(raw: str, context: str = "") -> bool:
         return True
     if re.search(r"\.(?:png|jpe?g|gif|svg|webp|css|js|ico|avif)\b|[\w-]+_\d{6,}(?:_\d{3,})+", lowered_context):
         return True
-    if "fax" in lowered_context and not has_positive_context:
+    raw_position = (context or '').find(raw)
+    if raw_position >= 0 and re.search(r'(?:\bfax\b|\bf\s*:)[\s:.*-]*(?:tel:\s*)?$', context[:raw_position], re.I):
         return True
-    return any(word in lowered_context for word in BAD_CONTEXT_WORDS) and not has_positive_context
+    return any(word in lowered_context for word in BAD_CONTEXT_WORDS if word != 'fax') and not has_positive_context
 
 
 def _phone_type_label(number: Any) -> str:
@@ -219,6 +221,24 @@ def _match_is_inside_noise(text: str, match: re.Match[str]) -> bool:
     return False
 
 
+def _explicit_fax_label(text, start):
+    # Tie a fax label to this number, rather than rejecting an adjacent phone
+    # merely because both occur in the same broad context window.
+    prefix = re.sub(r'<[^>]+>', ' ', text[max(0, start - 55):start])
+    return bool(re.search(r'(?:\bfax\b|\bf\s*:)[\s:.*-]*(?:tel:\s*)?$', prefix, re.I))
+
+
+def _published_number_region(text, start, default):
+    # Multi-office pages can contain unprefixed US numbers even when the
+    # requested market is India. Use the nearest preceding country label,
+    # rather than turning a New York number into a coincidentally valid +91.
+    prefix = re.sub(r'<[^>]+>', ' ', text[max(0, start - 150):start])
+    countries = {'usa': 'US', 'united states': 'US', 'india': 'IN',
+                 'uk': 'GB', 'united kingdom': 'GB', 'canada': 'CA', 'australia': 'AU'}
+    matches = list(re.finditer(r'\b(?:United States|United Kingdom|USA|India|UK|Canada|Australia)\b', prefix, re.I))
+    return countries[matches[-1][0].casefold()] if matches else default
+
+
 def normalize_phone_candidate(
     raw: Any,
     *,
@@ -229,7 +249,7 @@ def normalize_phone_candidate(
     region: str = "US",
 ) -> Dict[str, Any] | None:
     raw_text = _clean_raw_phone(raw)
-    if _looks_bad_before_parse(raw_text, context):
+    if _looks_bad_before_parse(raw_text, context, region):
         return None
 
     if not phonenumbers:
@@ -249,7 +269,7 @@ def normalize_phone_candidate(
 
     possible = phonenumbers.is_possible_number(parsed)
     valid = phonenumbers.is_valid_number(parsed)
-    if not possible:
+    if not possible or not valid:
         return None
 
     e164 = phonenumbers.format_number(parsed, PhoneNumberFormat.E164)
@@ -268,7 +288,7 @@ def normalize_phone_candidate(
 
     return {
         "raw": raw_text,
-        "display": national,
+        "display": e164,
         "e164": e164,
         "digits": _digits(e164),
         "source": source_type,
@@ -276,6 +296,7 @@ def normalize_phone_candidate(
         "source_url": source_url,
         "validation_status": validation_status,
         "phone_type": _phone_type_label(parsed),
+        "region": phonenumbers.region_code_for_number(parsed),
         "confidence": confidence,
         "context": re.sub(r"\s+", " ", context or "").strip()[:180],
     }
@@ -294,6 +315,8 @@ def extract_phone_candidates(
 
     for match in TEL_LINK_PATTERN.finditer(body):
         raw = match.group(1)
+        if _explicit_fax_label(body, match.start()):
+            continue
         if raw in seen_raw:
             continue
         seen_raw.add(raw)
@@ -301,14 +324,34 @@ def extract_phone_candidates(
             raw,
             source_type=source_type,
             source_url=source_url,
-            context="tel link",
+            context="tel link " + re.sub(r'<[^>]+>', ' ', _context_window(body, match.start(), match.end(), size=100)),
             source_kind="tel_link",
-            region=region,
+            region=_published_number_region(body, match.start(), region),
         )
         if candidate:
             candidates.append(candidate)
 
+    # libphonenumber retains international prefixes and understands regional grouping.
+    # Never run the US regex inside an international number (e.g. +91 9654675467).
+    if phonenumbers:
+        for match in phonenumbers.PhoneNumberMatcher(body, region):
+            raw = match.raw_string
+            if _explicit_fax_label(body, match.start):
+                continue
+            if raw in seen_raw:
+                continue
+            seen_raw.add(raw)
+            candidate = normalize_phone_candidate(
+                raw, source_type=source_type, source_url=source_url,
+                context=re.sub(r'<[^>]+>', ' ', _context_window(body, match.start, match.end, size=75)), region=_published_number_region(body, match.start, region),
+            )
+            if candidate:
+                candidates.append(candidate)
+        return rank_phone_candidates(candidates)
+
     for match in PHONE_TEXT_PATTERN.finditer(body):
+        if _explicit_fax_label(body, match.start()):
+            continue
         if _match_is_inside_noise(body, match):
             continue
         raw = match.group(0)
@@ -321,12 +364,27 @@ def extract_phone_candidates(
             source_url=source_url,
             context=_context_window(body, match.start(), match.end()),
             source_kind="text",
-            region=region,
+            region=_published_number_region(body, match.start(), region),
         )
         if candidate:
             candidates.append(candidate)
 
     return rank_phone_candidates(candidates)
+
+
+def phone_region_for_location(location: str) -> str:
+    """Use explicit country/city evidence; do not reinterpret + prefixed numbers."""
+    mappings = {
+        "IN": r"\b(india|delhi|noida|mumbai|bengaluru|bangalore|hyderabad|pune|chennai|gurugram|gurgaon|kolkata)\b",
+        "GB": r"\b(uk|united kingdom|england|london|manchester|birmingham|scotland)\b",
+        "AU": r"\b(australia|sydney|melbourne|brisbane)\b",
+        "CA": r"\b(canada|toronto|vancouver|ontario)\b",
+        "US": r"\b(usa|united states|new york|miami|texas|california|florida|austin)\b",
+    }
+    for region, pattern in mappings.items():
+        if re.search(pattern, location or "", re.I):
+            return region
+    return "US"
 
 
 def phone_candidates_from_values(
@@ -343,6 +401,17 @@ def phone_candidates_from_values(
     return rank_phone_candidates([candidate for candidate in candidates if candidate])
 
 
+def prefer_phone_region(summary: Dict[str, Any], region: str) -> Dict[str, Any]:
+    """Choose the requested office's country when a multi-office site supplies both."""
+    candidates = summary.get("phone_candidates") or []
+    local = [candidate for candidate in candidates if candidate.get("region") == region]
+    if not local:
+        return summary
+    preferred = build_phone_summary(local)
+    preferred["alternate_phones"] = [c["e164"] for c in candidates if c["e164"] != preferred["contact_phone"]][:4]
+    return preferred
+
+
 def rank_phone_candidates(candidates: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     best_by_key: Dict[str, Dict[str, Any]] = {}
     for candidate in candidates or []:
@@ -352,11 +421,12 @@ def rank_phone_candidates(candidates: Iterable[Dict[str, Any]]) -> List[Dict[str
         if not key:
             continue
         existing = best_by_key.get(key)
-        if not existing or int(candidate.get("confidence") or 0) > int(existing.get("confidence") or 0):
+        if not existing or (bool(candidate.get('requested_office_match')), int(candidate.get("confidence") or 0)) > (bool(existing.get('requested_office_match')), int(existing.get("confidence") or 0)):
             best_by_key[key] = candidate
     return sorted(
         best_by_key.values(),
         key=lambda item: (
+            bool(item.get('requested_office_match')),
             int(item.get("confidence") or 0),
             1 if item.get("validation_status") == "valid" else 0,
             1 if item.get("source_kind") == "tel_link" else 0,

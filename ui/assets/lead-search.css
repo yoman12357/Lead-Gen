@@ -1,0 +1,59 @@
+.client-lead-platform main { align-items:start; }
+.client-lead-platform #truthful-pipeline { display:none; }
+.client-metrics { grid-template-columns:repeat(2,minmax(0,1fr))!important; }
+.client-metrics > div { opacity:1!important; transform:none!important; }
+.search-status-panel { background:linear-gradient(120deg,rgba(70,67,180,.22),rgba(12,140,162,.12)); border:1px solid rgba(142,152,232,.22); border-radius:22px; padding:24px; }
+.search-status-heading { display:flex; align-items:center; justify-content:space-between; gap:18px; }
+.search-eyebrow { color:#a3a9ee; font-size:10px; letter-spacing:.16em; font-weight:700; }
+.search-status-panel h2 { margin:8px 0; font-size:clamp(20px,2vw,28px); letter-spacing:-.035em; font-weight:600; }
+.search-status-panel p { font-size:13px; line-height:1.7; color:#b5bdd8; max-width:760px; }
+.search-status-footer { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; color:#96a2c4; font-size:10px; margin:10px 0; }
+.search-meter { height:5px; border-radius:10px; background:rgba(140,160,210,.13); overflow:hidden; margin-top:20px; }
+.search-meter span { display:block; height:100%; width:0; background:linear-gradient(90deg,#8263ff,#3ee5d0); transition:width .4s; }
+#cancel-search { border:1px solid #8f79e5; border-radius:10px; padding:9px 14px; font-size:12px; white-space:nowrap; }
+.search-export-option { display:flex; gap:8px; align-items:center; margin-top:15px; color:#9faaca; font-size:11px; }
+.search-advanced { border:1px solid rgba(145,157,214,.16); border-radius:16px; }
+.search-advanced > summary { padding:16px; cursor:pointer; color:#adb8dc; font-size:12px; }
+.search-advanced > section { border:0!important; box-shadow:none!important; }
+#client-results { min-height:360px; flex-grow:0; }
+#client-results > div { max-height:76vh; }
+#client-results thead { position:sticky; top:0; z-index:2; background:#161e3b; }
+#client-results table { min-width:1000px; table-layout:fixed; }
+#client-results th:first-child { width:40px; }
+#client-results th:nth-child(2) { width:190px; }
+#client-results th:nth-child(3) { width:235px; }
+#client-results th:nth-child(4) { width:180px; }
+#client-results th:nth-child(5) { width:130px; }
+#client-results th:nth-child(6) { width:125px; }
+#client-results th:nth-child(7) { width:110px; }
+.client-lead-row td { padding:20px 14px; vertical-align:top; font-size:12px; line-height:1.6; overflow-wrap:anywhere; }
+.client-lead-row strong { font-size:13px; color:#e3e9ff; font-weight:600; }
+.client-lead-row a { color:#9db9ff; font-size:11px; }
+.client-subtext { color:#95a0bf; font-size:10px; margin:5px 0; }
+.client-category { display:block; font-size:9px; color:#9ca8d0; margin-top:8px; }
+.client-email { color:#e0e7ff; }
+.client-quality { display:inline-block; font-weight:700; color:#a7e9d8; background:rgba(74,205,167,.1); padding:4px 9px; border-radius:8px; }
+.client-email-status { display:block; font-size:10px; line-height:1.5; color:#dac58d; }
+.client-email-status.confirmed { color:#74e6b0; }
+.client-evidence { font-size:10px; color:#b1bedf; }
+.client-evidence summary { cursor:pointer; font-size:11px; }
+.client-evidence p { margin:10px 0; }
+.client-verify { border:1px solid #56648b; border-radius:8px; padding:6px 8px; font-size:10px; }
+body.light-theme .search-status-panel p, body.light-theme .client-subtext { color:#526384; }
+body.light-theme .client-lead-row strong, body.light-theme .client-email { color:#182d56; }
+body.light-theme .client-email-status { color:#886518; }
+@media(max-width:700px) {
+  .search-status-panel { padding:18px; }
+  .search-status-heading { align-items:flex-start; }
+  .search-status-footer span:last-child { display:none; }
+  #client-results table { min-width:0; display:block; }
+  #client-results thead { display:none; }
+  #client-results tbody { display:block; }
+  #client-results > div { max-height:85vh; }
+  .client-lead-row { display:grid; grid-template-columns:24px minmax(0,1fr); padding:16px 10px; }
+  .client-lead-row td { display:block; padding:3px 5px; }
+  .client-lead-row td:nth-child(n+3) { grid-column:2; }
+  .client-lead-row strong { font-size:14px; }
+  .client-lead-row td:nth-child(5) { margin-top:8px; }
+  .client-email { margin-top:8px; }
+}

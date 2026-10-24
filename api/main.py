@@ -4,16 +4,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 from api.auth import api_key_middleware
 from api.request_logging import request_logger, setup_request_logging
 from api.state import state
 from api.routes import (
-    health, learning, image, blocks, agent,
-    campus_learning_agent, agent_kernel, workflow,
+    health, blocks, agent, agent_kernel, workflow,
     admin, agent_directory, studio, leads, email_verification,
-    velit_batch_scheduler,
+    velit_batch_scheduler, lead_search,
 )
 from core.adapters.router import build_adapter_from_env
 from core.retrieval.embeddings import EmbeddingService
@@ -72,7 +72,7 @@ async def lifespan(app: FastAPI):
     # ── Qdrant vector store ───────────────────────────────────────────────────
     qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
     qdrant_api_key = os.getenv("QDRANT_API_KEY")
-    collection_name = os.getenv("QDRANT_COLLECTION", "aurika_campus_content")
+    collection_name = os.getenv("QDRANT_COLLECTION", "aryan_knowledge")
     embedding_service = EmbeddingService(state.adapter) if state.adapter else None
 
     try:
@@ -95,7 +95,7 @@ async def lifespan(app: FastAPI):
     # ── Logging ───────────────────────────────────────────────────────────────
     state.token_tracker = TokenTracker(
         output_path=os.getenv("TOKEN_LOG_PATH", "logs/token_usage.csv"),
-        jsonl_path=os.getenv("JSONL_LOG_PATH", "logs/tutor_logs.jsonl"),
+        jsonl_path=os.getenv("JSONL_LOG_PATH", "logs/agent_logs.jsonl"),
         steps_jsonl_path=os.getenv("AGENT_STEPS_LOG_PATH", "logs/agent_steps.jsonl"),
     )
 
@@ -115,7 +115,7 @@ async def lifespan(app: FastAPI):
         from core.db.tool_store import ToolStore
         from core.db.directory_store import DirectoryStore
 
-        business_id = os.getenv("FIRESTORE_BUSINESS_ID", "aurika-agentic-core")
+        business_id = os.getenv("FIRESTORE_BUSINESS_ID", "aryan-lead-gen")
         fs_client = FirestoreClient(business_id=business_id)
 
         state.agent_store = AgentStore(fs_client)
@@ -140,10 +140,8 @@ async def lifespan(app: FastAPI):
     try:
         state.todo_store = TodoSheetStore(
             sheet_id=os.getenv("TODO_SHEET_ID"),
-            sheet_name=os.getenv("TODO_SHEET_FILE_NAME", "Aurika Agent Todo"),
+            sheet_name=os.getenv("TODO_SHEET_FILE_NAME", "Aryan Leads"),
             folder_id=os.getenv("GOOGLE_DRIVE_FOLDER_ID"),
-            tasks_worksheet_name=os.getenv("TODO_WORKSHEET_NAME", "tasks"),
-            audit_worksheet_name=os.getenv("TODO_AUDIT_WORKSHEET", "audit_log"),
         )
         # LEADS_WORKSHEET_NAME is read inside TodoSheetStore via os.getenv automatically
     except Exception as exc:
@@ -179,19 +177,25 @@ async def lifespan(app: FastAPI):
     state.velit_batch_scheduler = VelitBatchScheduler()
     await state.velit_batch_scheduler.start_runtime()
 
-    print("Agentic Core initialised")
+    print("Aryan Lead-Gen initialised")
+    lead_search.jobs.start()
     yield
+    await lead_search.jobs.close()
     if state.velit_batch_scheduler:
         await state.velit_batch_scheduler.stop_runtime()
-    print("Agentic Core shutting down")
+    print("Aryan Lead-Gen shutting down")
 
 
 app = FastAPI(
-    title="Agentic Core",
-    description="Unified AI Microservice for Aurika",
+    title="Aryan",
+    description="Aryan's AI lead-generation and agent workspace",
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Shared presentation assets for the standalone HTML workspaces. This mount is
+# additive and does not change any API, workflow, scheduler, or export contract.
+app.mount("/assets", StaticFiles(directory="ui/assets"), name="frontend-assets")
 
 setup_request_logging()
 
@@ -248,17 +252,15 @@ if _include_optional_route("ENABLE_COMPANY_CHAT_INTEL", False):
 
 
 app.include_router(health.router,                                              tags=["Health"])
-app.include_router(learning.router,          prefix="/api/learning/chat",     tags=["Learning"])
-app.include_router(image.router,             prefix="/api/image",             tags=["Image"])
 app.include_router(blocks.router,            prefix="/api/blocks",            tags=["Blocks"])
 app.include_router(agent.router,             prefix="/api/agent",             tags=["Agent"])
 app.include_router(agent_kernel.router,      prefix="/api/agent",             tags=["Agent Kernel"])
-app.include_router(campus_learning_agent.router, prefix="/api/campus",        tags=["Campus"])
 app.include_router(workflow.router,          prefix="/api/workflow",          tags=["Workflow"])
 app.include_router(admin.router,             prefix="/api/admin",             tags=["Admin"])
 app.include_router(agent_directory.router,   prefix="/api/directory",         tags=["Agent Directory"])
 app.include_router(studio.router,            prefix="/api/studio",            tags=["Studio"])
 app.include_router(leads.router,             prefix="/api/leads",             tags=["Leads"])
+app.include_router(lead_search.router,       prefix="/api/lead-searches",     tags=["Lead Searches"])
 app.include_router(email_verification.router, prefix="/api/email-verification", tags=["Email Verification"])
 app.include_router(velit_batch_scheduler.router, prefix="/api/velit-batch", tags=["Velit Batch Scheduler"])
 

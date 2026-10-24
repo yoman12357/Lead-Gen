@@ -23,7 +23,7 @@ def _minimal_xlsx() -> bytes:
             "xl/sharedStrings.xml": """<?xml version="1.0" encoding="UTF-8"?>
 <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <si><t>Venue</t></si>
-  <si><t>Aurika</t></si>
+  <si><t>Aryan</t></si>
   <si><t>Revenue</t></si>
 </sst>""",
             "xl/worksheets/sheet1.xml": """<?xml version="1.0" encoding="UTF-8"?>
@@ -72,7 +72,7 @@ def test_media_processor_extracts_xlsx_text():
     message = result.build_message("Analyze this spreadsheet")
 
     assert "Venue" in message
-    assert "Aurika" in message
+    assert "Aryan" in message
     assert "Revenue" in message
     assert "1200" in message
     assert result.summaries[0].kind == "spreadsheet"

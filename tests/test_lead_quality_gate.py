@@ -46,7 +46,7 @@ class TestLeadQualityGate(unittest.TestCase):
         normalized = normalize_and_score_lead(lead)
 
         self.assertEqual(normalized["pipeline_disposition"], "Needs_Review")
-        self.assertEqual(normalized["contact_email"], "")
+        self.assertEqual(normalized["contact_email"], "sales@brooklyncampervans.com")
         self.assertIn("sales@brooklyncampervans.com", normalized["alternative_contacts"]["generic_emails"])
 
     def test_apply_quality_gate_keeps_reviewable_generic_email_lead(self):

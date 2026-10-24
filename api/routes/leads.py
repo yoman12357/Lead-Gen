@@ -68,7 +68,7 @@ def _has_verification(lead: Dict[str, Any]) -> bool:
         verification.get("status") or verification.get("normalized_email") or verification.get("message")
     ):
         return True
-    return bool(lead.get("verification_status") or lead.get("email_status"))
+    return False
 
 
 def _verification_error(email: str, exc: Exception) -> Dict[str, Any]:
@@ -110,8 +110,6 @@ def _verification_label(verification: dict) -> str:
 
 
 def _ensure_lead_summary(lead: Dict[str, Any]) -> None:
-    if str(lead.get("lead_summary") or "").strip():
-        return
     if not any(
         lead.get(key)
         for key in (
@@ -130,6 +128,7 @@ def _ensure_lead_summary(lead: Dict[str, Any]) -> None:
 
 def _apply_email_verification(lead: Dict[str, Any], verification: Dict[str, Any], lead_quality: Dict[str, Any] | None = None) -> Dict[str, Any]:
     updated = dict(lead)
+    updated["verifying"] = False
     checks = verification.get("checks") if isinstance(verification.get("checks"), list) else []
     status = verification.get("status") or updated.get("verification_status") or ""
     label = _verification_label(verification)
@@ -152,6 +151,7 @@ def _apply_email_verification(lead: Dict[str, Any], verification: Dict[str, Any]
     updated["email_verification_duration_ms"] = verification.get("duration_ms") or 0
 
     if lead_quality:
+        updated["pipeline_disposition"] = "Rejected" if lead_quality.get("rejected") else "Approved" if lead_quality.get("quality_status") == "Strong" else "Needs_Review"
         updated["quality_score"] = lead_quality.get("quality_score", updated.get("quality_score"))
         updated["confidence"] = lead_quality.get("confidence") or updated.get("confidence")
         updated["quality_status"] = lead_quality.get("quality_status") or updated.get("quality_status")
@@ -164,6 +164,7 @@ def _apply_email_verification(lead: Dict[str, Any], verification: Dict[str, Any]
             or lead_quality.get("confidence_explanation")
             or updated.get("acceptance_reason")
         )
+        updated["confidence_explanation"] = updated["acceptance_reason"]
         updated["field_sources"] = lead_quality.get("field_sources") or updated.get("field_sources")
 
     _ensure_lead_summary(updated)
@@ -182,10 +183,10 @@ async def _verify_export_lead(lead: Dict[str, Any], *, skip_already_verified: bo
             "message": "No email address was found on this lead.",
             "checks": [],
         }
-        return _apply_email_verification(updated, verification)
+        return _apply_email_verification(updated, verification, score_lead(updated, verification))
 
     if skip_already_verified and _has_verification(updated):
-        return updated
+        return _apply_email_verification(updated, updated["email_verification"], score_lead(updated))
 
     async with semaphore:
         try:

@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any, Dict, List, Tuple
 from urllib.parse import urlparse
 import logging
+from core.utils.phone_quality import normalize_phone_candidate, phone_region_for_location
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,8 @@ HIGH_PRIORITY_TITLES = {
 
 
 def _clean(value: Any) -> str:
-    return " ".join(str(value or "").split()).strip()
+    text = " ".join(str(value or "").split()).strip()
+    return "" if text.lower() in {"—", "-", "--", "none", "null", "n/a", "not found"} else text
 
 
 def _first_non_empty(*values: Any) -> str:
@@ -104,7 +106,8 @@ def _acceptance_explanation(
         readable_notes = [note.replace("_", " ") for note in notes[:3]]
         note_text = f" Extra signals: {', '.join(readable_notes)}."
     display_score = max(0, min(int(score or 0), 100))
-    return f"Accepted as {quality_status.lower()} because {company} has {signal_text}. Quality score: {display_score}/100.{note_text}"
+    warning_text = f" Review: {', '.join(w.replace('_', ' ') for w in warnings)}." if warnings else ""
+    return f"{company}: {quality_status}. Evidence: {signal_text}. Quality score: {display_score}/100.{note_text}{warning_text}"
 
 
 def _field_source_map(lead: Dict[str, Any]) -> Dict[str, str]:
@@ -158,6 +161,21 @@ def score_lead(lead: Dict[str, Any], verification: Dict[str, Any] | None = None)
         score = 0
         notes: List[str] = []
         warnings: List[str] = []
+        if person_name.casefold() == company_name.casefold():
+            person_name = ""
+        verification = verification if verification is not None else lead.get("email_verification") or {}
+        email_status = _clean(verification.get("status")).lower()
+        verified_email = email_status == "valid" and bool(verification.get("smtp_verified"))
+        phone_candidate = normalize_phone_candidate(phone, region=phone_region_for_location(location)) if phone else None
+        valid_phone = bool(phone_candidate and phone_candidate.get("validation_status") == "valid")
+        if phone and not valid_phone:
+            warnings.append("phone_not_validated")
+        if email and not verified_email:
+            warnings.append("email_not_verified")
+        if lead.get("location_match") is False:
+            warnings.append("location_not_confirmed")
+        if lead.get("industry_match") is False:
+            warnings.append("industry_mismatch")
 
         if company_name:
             score += 15
@@ -191,13 +209,14 @@ def score_lead(lead: Dict[str, Any], verification: Dict[str, Any] | None = None)
             else:
                 notes.append("generic_email_fallback")
 
-            if website_domain and email_domain and website_domain in email_domain:
+            website_domain = website_domain.removeprefix("www.")
+            if website_domain and email_domain and (email_domain == website_domain or email_domain.endswith("." + website_domain)):
                 score += 4
                 notes.append("email_matches_company_domain")
         else:
             warnings.append("missing_email")
 
-        if phone:
+        if valid_phone:
             score += 8
         if linkedin_url:
             score += 8
@@ -213,11 +232,10 @@ def score_lead(lead: Dict[str, Any], verification: Dict[str, Any] | None = None)
 
         if verification:
             status = _clean(verification.get("status")).lower()
-            if status == "valid":
+            if verified_email:
                 score += 14
                 notes.append("email_verified_valid")
             elif status == "risky":
-                score += 4
                 notes.append("email_verification_risky")
             elif status == "invalid":
                 score -= 14
@@ -227,7 +245,10 @@ def score_lead(lead: Dict[str, Any], verification: Dict[str, Any] | None = None)
         if isinstance(fallback_paths, list) and fallback_paths:
             score += min(6, len(fallback_paths) * 2)
 
-        usable_contact_paths = sum(bool(value) for value in (email, phone, linkedin_url, contact_page))
+        usable_contact_paths = sum(bool(value) for value in (
+            email if email_status != "invalid" else "", valid_phone,
+            linkedin_url, lead.get("company_linkedin_url"), lead.get("contact_form_found") is True,
+        ))
         if usable_contact_paths == 0:
             score -= 18
             warnings.append("no_contact_path")
@@ -240,7 +261,14 @@ def score_lead(lead: Dict[str, Any], verification: Dict[str, Any] | None = None)
             score -= 6
             notes.append("person_without_contact_path")
 
-        score = max(score, 0)
+        # A complete-looking row is not proof of a reachable decision maker.
+        if not person_name or not (verified_email or valid_phone):
+            score = min(score, 69)
+        if email and not verified_email:
+            score = min(score, 69)
+        if "phone_not_validated" in warnings or "location_not_confirmed" in warnings:
+            score = min(score, 49)
+        score = max(0, min(score, 100))
 
         if score >= 80:  # Adjusted threshold
             confidence = "high"
@@ -253,12 +281,16 @@ def score_lead(lead: Dict[str, Any], verification: Dict[str, Any] | None = None)
             not company_name
             or not website
             or usable_contact_paths == 0
-            or ("email_invalid" in warnings and usable_contact_paths < 2)
+            or lead.get("industry_match") is False
+            or lead.get("location_match") is False
+            or lead.get("site_status") in {"dead", "blocked", "soft_404"}
         )
         usable = not rejected and score >= 40 # Adjusted threshold
 
         if rejected:
             quality_status = "Rejected"
+        elif "email_not_verified" in warnings or "missing_contact_person" in warnings or "phone_not_validated" in warnings:
+            quality_status = "Needs_Review"
         elif confidence == "high":
             quality_status = "Strong"
         elif confidence == "medium":

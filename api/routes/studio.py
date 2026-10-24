@@ -48,20 +48,16 @@ async def list_tools() -> List[Dict[str, Any]]:
 
 
 def _infer_category(name: str) -> str:
-    if name.startswith("todo"):
-        return "productivity"
     if name in ("rag_search",):
         return "knowledge"
     if name in ("http_request",):
         return "api"
     if name in ("web_search",):
         return "web"
-    if name in ("image_generate",):
-        return "media"
     if name in ("file_analyze", "json_extract"):
         return "data"
     return "other"
 
 
 def _requires_auth(name: str) -> bool:
-    return name in ("http_request", "web_search", "rag_search", "image_generate")
+    return name in ("http_request", "web_search", "rag_search")

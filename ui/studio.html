@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Agentic Core — Studio</title>
+  <title>Aryan — Studio</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/aryan-icon.svg" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script>tailwind.config = { theme: { extend: { colors: { brand: { DEFAULT:'#6366f1', dark:'#4f46e5', light:'#818cf8' } } } } }</script>
   <style>
@@ -39,13 +40,14 @@
     .agent-card:hover { border-color:#3730a3; }
     .wf-card:hover    { border-color:#065f46; }
   </style>
+  <link rel="stylesheet" href="/assets/workspace.css" />
 </head>
 <body class="min-h-screen">
 
 <!-- ── Header ── -->
 <header class="border-b border-[#2a2a3a] px-6 py-3.5 flex items-center gap-3 flex-shrink-0">
   <a href="/" class="w-7 h-7 rounded-lg bg-brand flex items-center justify-center text-white text-sm font-bold hover:bg-brand-dark transition-colors">A</a>
-  <span class="font-semibold text-white tracking-tight">Agentic Core</span>
+  <span class="font-semibold text-white tracking-tight">Aryan</span>
   <span class="text-[#3a3a50] text-sm ml-1">/ Studio</span>
   <div class="ml-auto flex items-center gap-3">
     <a href="/" class="text-xs text-[#64748b] hover:text-[#818cf8] transition-colors px-2 py-1 rounded hover:bg-[#1e1e30]">← Dashboard</a>
@@ -55,7 +57,7 @@
 </header>
 
 <!-- ── Top tabs ── -->
-<div class="border-b border-[#2a2a3a] px-6 flex gap-6">
+<div id="studio-tabs" class="border-b border-[#2a2a3a] px-6 flex gap-6">
   <button onclick="switchTab('create')"    id="tab-create"    class="tab-active py-3 text-sm font-medium">Create Agent</button>
   <button onclick="switchTab('agents')"   id="tab-agents"    class="tab-inactive py-3 text-sm font-medium">Agent Library</button>
   <button onclick="switchTab('workflows')" id="tab-workflows" class="tab-inactive py-3 text-sm font-medium">Workflow Library</button>
@@ -63,6 +65,7 @@
 </div>
 
 <!-- ════════════════════════ CREATE AGENT ════════════════════════ -->
+<main id="studio-workspace">
 <div id="pane-create" class="max-w-3xl mx-auto px-6 py-8 space-y-6">
 
   <!-- Toast -->
@@ -280,6 +283,7 @@
     </div>
   </div>
 </div>
+</main>
 
 <script>
 // ─────────────────────────────────────────────────────────────────────────────
@@ -814,5 +818,6 @@ document.getElementById('agent-run-modal').addEventListener('click', e => { if (
 
 init()
 </script>
+  <script src="/assets/workspace.js"></script>
 </body>
 </html>

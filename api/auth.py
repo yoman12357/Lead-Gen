@@ -68,12 +68,14 @@ async def api_key_middleware(request: Request, call_next):
     if not path.startswith("/api/"):
         return await call_next(request)
 
-    # Exempt internal UI calls (same-origin check)
+    # Local development UI only. Origin/Referer/Fetch headers are spoofable and
+    # must NEVER serve as authentication on a public production deployment.
     referer = request.headers.get("referer", "")
     origin = request.headers.get("origin", "")
     host = request.headers.get("host", "")
     sec_fetch_site = request.headers.get("sec-fetch-site", "").lower()
-    if host and (
+    local_ui = not is_production_mode() and _is_local_host(host) and request.client and request.client.host in {"127.0.0.1", "::1"}
+    if local_ui and (
         (referer and host in referer)
         or (origin and host in origin)
         or sec_fetch_site in {"same-origin", "same-site"}
@@ -82,7 +84,7 @@ async def api_key_middleware(request: Request, call_next):
 
     # The Velit scheduler is a local browser control panel. Allow it on
     # localhost so opening the HTML file directly can still reach the API.
-    if path.startswith("/api/velit-batch") and _is_local_host(host):
+    if path.startswith("/api/velit-batch") and local_ui:
         return await call_next(request)
 
     header_name = os.getenv("AGENTIC_CORE_API_KEY_HEADER", DEFAULT_API_KEY_HEADER)

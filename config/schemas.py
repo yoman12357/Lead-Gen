@@ -81,8 +81,8 @@ class VectorStoreConfig:
 class RetrievalConfig:
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: Optional[str] = None
-    collection_name: str = "aurika_campus_content"
-    embedding_model: str = "models/text-embedding-004"
+    collection_name: str = "aryan_knowledge"
+    embedding_model: str = "models/gemini-embedding-2"
     top_k: int = 10
     score_threshold: float = 0.5
 
