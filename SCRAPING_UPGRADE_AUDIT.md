@@ -21,7 +21,7 @@ Implementation sequence:
 - [x] Reuse extraction in Velit and Vento, retaining follower checks and correcting creator relevance/email bugs exposed by live tests.
 - [x] Verify automated tests, browser flows, exports and fresh live searches; measure time/credits and review sources.
 - [x] Review repository contents for secrets and preserve existing workspace changes.
-- [ ] Commit and push the verified project.
+- [x] Commit and push the verified project.
 
 No test or completion claim is made by this initial plan. Website publication, mailbox delivery and telephone reachability are different checks. Blocked/private sites will remain explicit failures rather than having contacts invented.
 
@@ -74,3 +74,7 @@ The workbook/report bundle stays in ignored local `exports/scraping-upgrade/deli
 Remaining limits: no universal 15-lead guarantee, no mailbox delivery/phone-answering/outreach verification, no certified live Sheets write (`TODO_SHEET_ID` is absent), no proprietary Hunter/Apollo-sized database, and no certification for multi-worker/serverless deployment. Local SQLite/scheduler workers still require a persistent single application worker. These limits do not turn shortfalls or unavailable sources into successful matches.
 
 Implementation references: [Beautiful Soup](https://www.crummy.com/software/BeautifulSoup/bs4/doc/), [Schema.org LocalBusiness](https://schema.org/LocalBusiness), [Playwright browser-context routing](https://playwright.dev/python/docs/api/class-browsercontext#browser-context-route).
+
+## Repository delivery
+
+The source release was committed as [`124498dacd351d9c0ad33b5845ffbf7b66f2aa03`](https://github.com/yoman12357/Lead-Gen/commit/124498dacd351d9c0ad33b5845ffbf7b66f2aa03) and pushed to `origin/main`. A fresh remote ref read matched the local commit. Staged-file scanning found no configured secrets/private keys, and generated leads, local databases, credentials and scratch files remain ignored. The release preserves and includes the pre-existing lead-focused workspace cleanup rather than discarding it. This final audit update changes documentation only.
