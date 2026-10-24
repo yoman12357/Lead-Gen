@@ -322,9 +322,12 @@ class LeadSearchEngine:
             self.duplicate_keys.update(identity_keys)
             self.accepted[domain_key(outcome["company_website"])] = outcome
             self.last_accept_at = time.monotonic()
-            if self.run_timeout is not None and self.idle_seconds and not self.run_timeout.expired():
+            if (len(self.accepted) < self.intent.target_count and self.run_timeout is not None
+                    and self.idle_seconds and not self.run_timeout.expired()):
                 # Stop an unproductive tail while preserving useful results.
                 # New verified companies extend this window, never the total cap.
+                # A completed target needs no idle timer: rescheduling to an
+                # already elapsed total deadline can cancel its final checkpoint.
                 self.run_timeout.reschedule(min(self.started+self.max_seconds, self.last_accept_at+self.idle_seconds))
             await self.publish("enriching", f"{min(len(self.accepted), self.intent.target_count)} of {self.intent.target_count} usable leads found.")
 

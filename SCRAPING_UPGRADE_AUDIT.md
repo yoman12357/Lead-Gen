@@ -75,6 +75,16 @@ Remaining limits: no universal 15-lead guarantee, no mailbox delivery/phone-answ
 
 Implementation references: [Beautiful Soup](https://www.crummy.com/software/BeautifulSoup/bs4/doc/), [Schema.org LocalBusiness](https://schema.org/LocalBusiness), [Playwright browser-context routing](https://playwright.dev/python/docs/api/class-browsercontext#browser-context-route).
 
+## Independent recheck, 24 October 2026
+
+A fresh five-case recheck returned Texas 11/15 (202.3 seconds, 22 reported Tavily credits), Velit California 5/5 (19.8s, 3), London accountants 5/5 (15.9s, 4), Austin grooming 5/5 (20.0s, 7), and Seattle creators 0/2 (43.1s, 18). Total: 54 reported Tavily credits with complete selected request reporting; Hunter/Gemini calls zero. The creator run made one Apify profile batch and used cached profiles; its monetary charge was not measured. Times are individual runner observations, not guarantees.
+
+This recheck does **not** grant full quality/quantity sign-off. United RV was incorrectly accepted because its brands page describes third-party manufacturers; it is excluded from the reviewed builder/upfitter set. Activity attribution still needs improvement. Premier Autos' metadata email remains independently unconfirmed and is withheld. Camplife Customs has a public phone that the scraper missed; the reviewed workbook records its recovery separately. The remaining 25 broad-category business matches include specialist upfitters and dealer custom-build programs, identified in workbook notes. They have 18 reproduced published emails and 24 system phone routes, plus the one manually recovered phone. No delivery or call-answering claim is made.
+
+All 26 previously delivered rows were rechecked: 17 included emails reproduced; 22 phones reproduced through direct HTTP and four supported through alternate official readers/indexed official pages. Blocked fetches are distinguished from incorrect values. Generated evidence and reopened review sheets are in ignored `exports/final-recheck-20261024/`.
+
+The first suite rerun had 294 passes and a reproducible completed-target timeout-status failure. Rescheduling the idle timer after reaching the target could cancel its final checkpoint when initialization had already consumed a very small total budget. The engine now leaves a completed target's timer alone. The full suite then passed 295 tests in 24.03 seconds. The independent UI contract passed twice with zero page errors. Texas coverage, creator coverage, third-party activity attribution, and missed public contacts remain explicit follow-up work.
+
 ## Repository delivery
 
 The source release was committed as [`124498dacd351d9c0ad33b5845ffbf7b66f2aa03`](https://github.com/yoman12357/Lead-Gen/commit/124498dacd351d9c0ad33b5845ffbf7b66f2aa03) and pushed to `origin/main`. A fresh remote ref read matched the local commit. Staged-file scanning found no configured secrets/private keys, and generated leads, local databases, credentials and scratch files remain ignored. The release preserves and includes the pre-existing lead-focused workspace cleanup rather than discarding it. This final audit update changes documentation only.
